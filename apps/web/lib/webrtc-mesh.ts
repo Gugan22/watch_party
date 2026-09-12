@@ -19,6 +19,7 @@ export type WebRTCEventMap = {
   reaction: (emoji: string, name: string) => void;
   playerSync: (action: 'play' | 'pause' | 'seek', time: number, url?: string) => void;
   kicked: () => void;
+  privatePing: (fromPeerId: string, fromName: string, message: string) => void;
 };
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -337,6 +338,13 @@ export class WebRTCMeshManager {
         break;
       }
 
+      case 'private-ping': {
+        if (signal.targetId === this.localPeerId) {
+          this.emit('privatePing', signal.from, signal.fromName || 'Someone', signal.message || '👋 Pinged you privately!');
+        }
+        break;
+      }
+
       case 'kick': {
         if (signal.targetId === this.localPeerId) {
           this.emit('kicked');
@@ -561,6 +569,17 @@ export class WebRTCMeshManager {
       peerId: this.localPeerId,
       isCamOn,
       isMicOn,
+    });
+  }
+
+  public sendPrivatePing(targetPeerId: string, message?: string) {
+    this.broadcast({
+      type: 'private-ping',
+      from: this.localPeerId,
+      fromName: this.displayName,
+      targetId: targetPeerId,
+      message: message?.trim() || '👋 Pinged you privately!',
+      timestamp: Date.now(),
     });
   }
 

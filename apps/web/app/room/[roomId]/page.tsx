@@ -16,6 +16,8 @@ import { CountdownModal } from '@/components/room/CountdownModal';
 import { PostCallView } from '@/components/room/PostCallView';
 import { ShareRoomModal } from '@/components/room/ShareRoomModal';
 import { NamePromptModal } from '@/components/room/NamePromptModal';
+import { PrivatePingModal } from '@/components/room/PrivatePingModal';
+import { PrivatePingToast, type ReceivedPing } from '@/components/room/PrivatePingToast';
 import { WebRTCMeshManager } from '@/lib/webrtc-mesh';
 
 type LayoutMode = 'spotlight' | 'grid' | 'sidebar';
@@ -36,6 +38,11 @@ export default function RoomPage() {
 
   // Mandatory guest name entry modal before entering the room
   const [isNamePromptOpen, setIsNamePromptOpen] = useState(false);
+
+  // Private Ping / Whisper state
+  const [activePingTarget, setActivePingTarget] = useState<{ id: string; name: string } | null>(null);
+  const [receivedPing, setReceivedPing] = useState<ReceivedPing | null>(null);
+  const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string | null>(null);
 
   // Check URL query parameters for ?share=true
   useEffect(() => {
@@ -424,6 +431,28 @@ export default function RoomPage() {
       setStage('left');
     });
 
+    // Incoming private ping whisper handler
+    mesh.on('privatePing', (fromPeerId, fromName, message) => {
+      setReceivedPing({
+        id: `ping-${Date.now()}`,
+        fromId: fromPeerId,
+        fromName,
+        message,
+        timestamp: Date.now(),
+      });
+
+      const privateMsg: ChatMessage = {
+        id: `msg-ping-${Date.now()}`,
+        senderId: fromPeerId,
+        senderName: fromName,
+        targetName: 'You',
+        isPrivate: true,
+        text: message,
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, privateMsg]);
+    });
+
     return () => {
       mesh.destroy();
       meshRef.current = null;
@@ -457,6 +486,32 @@ export default function RoomPage() {
       ]);
     }
   };
+
+  // Open private ping modal
+  const handleOpenPingModal = useCallback((targetId: string, targetName: string) => {
+    setActivePingTarget({ id: targetId, name: targetName });
+  }, []);
+
+  // Send private ping
+  const handleSendPrivatePing = useCallback((targetId: string, message: string) => {
+    const target = participants.find((p) => p.id === targetId);
+    const targetName = target ? target.name : 'Participant';
+
+    meshRef.current?.sendPrivatePing(targetId, message);
+
+    // Append local record to chat feed
+    const newMsg: ChatMessage = {
+      id: `ping-${Date.now()}`,
+      senderId: 'me',
+      senderName: `${displayName || 'You'}`,
+      targetId,
+      targetName,
+      isPrivate: true,
+      text: message,
+      timestamp: Date.now(),
+    };
+    setMessages((prev) => [...prev, newMsg]);
+  }, [participants, displayName]);
 
   // Host Action: Kick / Remove participant
   const handleKickParticipant = async (participantId: string) => {
@@ -655,15 +710,40 @@ export default function RoomPage() {
     }, 2800);
   };
 
-  // Send Chat Message
+  // Send Chat Message (Public or Private Whisper)
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    const text = chatInput.trim();
+    if (!text) return;
+
+    if (selectedChatRecipientId) {
+      const recipient = participants.find((p) => p.id === selectedChatRecipientId);
+      const recipientName = recipient ? recipient.name : 'Participant';
+      meshRef.current?.sendPrivatePing(selectedChatRecipientId, text);
+
+      const privateMsg: ChatMessage = {
+        id: `ping-${Date.now()}`,
+        senderId: session?.user?.email || displayName || 'guest',
+        senderName: `${displayName || 'You'}`,
+        targetId: selectedChatRecipientId,
+        targetName: recipientName,
+        isPrivate: true,
+        text,
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, privateMsg]);
+      setChatInput('');
+      setTimeout(() => {
+        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+      return;
+    }
+
     const msg: ChatMessage = {
       id: Math.random().toString(),
       senderId: session?.user?.email || displayName || 'guest',
       senderName: displayName || 'You',
-      text: chatInput.trim(),
+      text,
       timestamp: Date.now(),
     };
     setMessages((prev) => [...prev, msg]);
@@ -1110,6 +1190,7 @@ export default function RoomPage() {
                       onPin={setPinnedId}
                       onKick={handleKickParticipant}
                       onToggleHostMute={handleToggleHostMute}
+                      onPing={handleOpenPingModal}
                       style={{ width: '160px', height: '100%', flexShrink: 0 }}
                     />
                   ))
@@ -1187,6 +1268,7 @@ export default function RoomPage() {
                     isMutedForHost={hostMutedIds.has(p.id)}
                     onKick={handleKickParticipant}
                     onToggleHostMute={handleToggleHostMute}
+                    onPing={handleOpenPingModal}
                     style={{ minHeight: '220px' }}
                   />
                 ))
@@ -1259,6 +1341,7 @@ export default function RoomPage() {
                       isMutedForHost={hostMutedIds.has(p.id)}
                       onKick={handleKickParticipant}
                       onToggleHostMute={handleToggleHostMute}
+                      onPing={handleOpenPingModal}
                       style={{ height: '140px' }}
                     />
                   ))
@@ -1310,6 +1393,9 @@ export default function RoomPage() {
         onSendMessage={handleSendChat}
         onClose={() => setIsChatOpen(false)}
         chatBottomRef={chatBottomRef}
+        participants={participants}
+        selectedRecipientId={selectedChatRecipientId}
+        onSelectRecipient={setSelectedChatRecipientId}
       />
 
       {/* Share Room Modal (Only for Host or Launched with ?share=true) */}
@@ -1329,6 +1415,24 @@ export default function RoomPage() {
         onToggleCam={toggleCam}
         onToggleMic={toggleMic}
         localStream={localStream}
+      />
+
+      {/* Private Ping / Whisper Modal */}
+      {activePingTarget && (
+        <PrivatePingModal
+          isOpen={Boolean(activePingTarget)}
+          targetId={activePingTarget.id}
+          targetName={activePingTarget.name}
+          onSendPing={handleSendPrivatePing}
+          onClose={() => setActivePingTarget(null)}
+        />
+      )}
+
+      {/* Incoming Private Ping Toast Notification */}
+      <PrivatePingToast
+        ping={receivedPing}
+        onPingBack={(fromId, fromName) => handleOpenPingModal(fromId, fromName)}
+        onDismiss={() => setReceivedPing(null)}
       />
     </div>
   );

@@ -21,6 +21,7 @@ interface VideoTileProps {
   onKick?: (id: string) => void;
   onToggleHostMute?: (id: string) => void;
   onRequestMedia?: () => void;
+  onPing?: (id: string, name: string) => void;
   style?: React.CSSProperties;
 }
 
@@ -34,6 +35,7 @@ export const VideoTile: React.FC<VideoTileProps> = ({
   onKick,
   onToggleHostMute,
   onRequestMedia,
+  onPing,
   style,
 }) => {
   const [showHostMenu, setShowHostMenu] = useState(false);
@@ -227,6 +229,27 @@ export const VideoTile: React.FC<VideoTileProps> = ({
           title={`Pin ${participant.name} to focal stage`}
         >
           📌
+        </button>
+      )}
+
+      {/* Private Ping button for remote participants */}
+      {!isSelf && onPing && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPing(participant.id, participant.name);
+          }}
+          className="tile-pin-btn"
+          style={{
+            right: onPin ? '40px' : '8px',
+            background: 'rgba(139, 92, 246, 0.8)',
+            border: '1px solid rgba(167, 139, 250, 0.5)',
+            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.4)',
+          }}
+          title={`Ping ${participant.name} privately`}
+        >
+          🔔
         </button>
       )}
 

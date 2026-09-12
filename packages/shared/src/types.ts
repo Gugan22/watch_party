@@ -29,6 +29,9 @@ export interface ChatMessage {
   senderName: string;
   text: string;
   timestamp: number;
+  isPrivate?: boolean;
+  targetId?: string;
+  targetName?: string;
 }
 
 export interface CatchUpRequest {

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { ChatMessage } from '@watch-party/shared';
+import type { Participant } from './VideoTile';
 
 interface ChatDrawerProps {
   isOpen: boolean;
@@ -11,6 +12,9 @@ interface ChatDrawerProps {
   onSendMessage: (e: React.FormEvent) => void;
   onClose: () => void;
   chatBottomRef: React.RefObject<HTMLDivElement>;
+  participants?: Participant[];
+  selectedRecipientId?: string | null;
+  onSelectRecipient?: (id: string | null) => void;
 }
 
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({
@@ -21,7 +25,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
   onSendMessage,
   onClose,
   chatBottomRef,
+  participants = [],
+  selectedRecipientId = null,
+  onSelectRecipient,
 }) => {
+  const selectedParticipant = participants.find((p) => p.id === selectedRecipientId);
+
   return (
     <div className={`chat-drawer ${!isOpen ? 'closed' : ''}`}>
       {/* Header */}
@@ -64,28 +73,96 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           gap: '0.75rem',
         }}
       >
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            style={{
-              background: m.senderId === 'system' ? 'var(--bg-raised)' : 'var(--accent-blue-surface)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              padding: '0.6rem 0.75rem',
-              fontSize: '0.82rem',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{m.senderName}</span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
+        {messages.map((m) => {
+          const isPrivate = Boolean(m.isPrivate);
+
+          return (
+            <div
+              key={m.id}
+              style={{
+                background: isPrivate
+                  ? 'rgba(139, 92, 246, 0.14)'
+                  : m.senderId === 'system'
+                  ? 'var(--bg-raised)'
+                  : 'var(--accent-blue-surface)',
+                border: isPrivate
+                  ? '1px solid rgba(139, 92, 246, 0.35)'
+                  : '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.6rem 0.75rem',
+                fontSize: '0.82rem',
+                boxShadow: isPrivate ? '0 2px 8px rgba(139, 92, 246, 0.15)' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {isPrivate && <span style={{ fontSize: '0.75rem' }}>🔒</span>}
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color: isPrivate ? '#C4B5FD' : 'var(--text-primary)',
+                    }}
+                  >
+                    {m.senderName}
+                  </span>
+                  {isPrivate && m.targetName && (
+                    <span style={{ fontSize: '0.72rem', color: '#A78BFA' }}>
+                      ➔ {m.targetName}
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              <p style={{ color: isPrivate ? '#F1F5F9' : 'var(--text-secondary)', wordBreak: 'break-word', margin: 0 }}>
+                {m.text}
+              </p>
             </div>
-            <p style={{ color: 'var(--text-secondary)', wordBreak: 'break-word' }}>{m.text}</p>
-          </div>
-        ))}
+          );
+        })}
         <div ref={chatBottomRef} />
       </div>
+
+      {/* Recipient Selector (Everyone or Private Whisper) */}
+      {onSelectRecipient && participants.length > 0 && (
+        <div
+          style={{
+            padding: '0.4rem 0.75rem',
+            background: 'var(--bg-raised)',
+            borderTop: '1px solid var(--border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '0.75rem',
+          }}
+        >
+          <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Send to:</span>
+          <select
+            value={selectedRecipientId || ''}
+            onChange={(e) => onSelectRecipient(e.target.value || null)}
+            style={{
+              background: selectedRecipientId ? 'rgba(139, 92, 246, 0.2)' : 'var(--bg-surface)',
+              color: selectedRecipientId ? '#C4B5FD' : 'var(--text-primary)',
+              border: `1px solid ${selectedRecipientId ? '#8B5CF6' : 'var(--border-subtle)'}`,
+              borderRadius: 'var(--radius-sm)',
+              padding: '2px 6px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              outline: 'none',
+              maxWidth: '180px',
+            }}
+          >
+            <option value="">👥 Everyone (Public)</option>
+            {participants.map((p) => (
+              <option key={p.id} value={p.id}>
+                🔒 {p.name} (Private Whisper)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Chat input form */}
       <form
@@ -102,15 +179,29 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({
           className="tactile-input"
           value={chatInput}
           onChange={(e) => onInputChange(e.target.value)}
-          placeholder="Type a message..."
-          style={{ fontSize: '0.85rem', padding: '0.5rem 0.75rem' }}
+          placeholder={
+            selectedParticipant
+              ? `Whisper privately to ${selectedParticipant.name}...`
+              : 'Type a message...'
+          }
+          style={{
+            fontSize: '0.85rem',
+            padding: '0.5rem 0.75rem',
+            borderColor: selectedParticipant ? '#8B5CF6' : undefined,
+          }}
         />
         <button
           type="submit"
           className="tactile-btn tactile-btn-primary"
-          style={{ padding: '0.5rem 0.85rem' }}
+          style={{
+            padding: '0.5rem 0.85rem',
+            background: selectedParticipant
+              ? 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)'
+              : undefined,
+            borderColor: selectedParticipant ? '#7C3AED' : undefined,
+          }}
         >
-          Send
+          {selectedParticipant ? 'Whisper 🔒' : 'Send'}
         </button>
       </form>
     </div>
