@@ -22,8 +22,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Room ID is required to join' }, { status: 400 });
   }
 
-  // Verify room exists in active room store
-  const room = getRoom(cleanRoomId);
+  // Verify room exists in active room store or provision for valid room links
+  let room = getRoom(cleanRoomId);
+  if (!room) {
+    if (cleanRoomId.length >= 3) {
+      const created = createRoom(cleanRoomId, 'Watch Party', '', 'Host', 12);
+      room = created.room;
+    }
+  }
+
   if (!room) {
     return NextResponse.json(
       { error: 'This watch party room has ended or does not exist.', notFound: true },

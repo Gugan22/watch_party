@@ -217,7 +217,10 @@ export default function RoomPage() {
       } else if (isHost) {
         nameToUse = 'Host';
       } else {
-        const stored = sessionStorage.getItem(`wp_name_${roomId}`) || localStorage.getItem('wp_user_display_name');
+        const stored =
+          sessionStorage.getItem(`wp_name_${roomId}`) ||
+          sessionStorage.getItem('wp_user_display_name') ||
+          localStorage.getItem('wp_user_display_name');
         if (stored && stored.trim().length >= 2) {
           nameToUse = stored.trim();
         } else {
@@ -226,6 +229,12 @@ export default function RoomPage() {
           return;
         }
       }
+    }
+
+    if (typeof window !== 'undefined' && nameToUse) {
+      sessionStorage.setItem(`wp_name_${roomId}`, nameToUse);
+      sessionStorage.setItem('wp_user_display_name', nameToUse);
+      localStorage.setItem('wp_user_display_name', nameToUse);
     }
 
     setIsConnecting(true);
@@ -263,13 +272,19 @@ export default function RoomPage() {
     } finally {
       setIsConnecting(false);
     }
-  }, [roomId, isHost, session]);
+  }, [roomId, isHost, session, router]);
 
   // Guest name submission from NamePromptModal
   const handleGuestNameSubmit = (enteredName: string) => {
     setIsNamePromptOpen(false);
-    setDisplayName(enteredName);
-    handleJoinParty(enteredName);
+    const clean = enteredName.trim();
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(`wp_name_${roomId}`, clean);
+      sessionStorage.setItem('wp_user_display_name', clean);
+      localStorage.setItem('wp_user_display_name', clean);
+    }
+    setDisplayName(clean);
+    handleJoinParty(clean);
   };
 
   // Direct check on mount: If Host or valid session name exists, join; otherwise ask for name
@@ -299,9 +314,14 @@ export default function RoomPage() {
       return;
     }
 
-    const sessionName = sessionStorage.getItem(`wp_name_${roomId}`);
-    if (sessionName && sessionName.trim().length >= 2) {
-      handleJoinParty(sessionName.trim());
+    // Fast check across sessionStorage and localStorage for seamless instant entry
+    const storedName =
+      sessionStorage.getItem(`wp_name_${roomId}`) ||
+      sessionStorage.getItem('wp_user_display_name') ||
+      localStorage.getItem('wp_user_display_name');
+
+    if (storedName && storedName.trim().length >= 2) {
+      handleJoinParty(storedName.trim());
     } else {
       setIsNamePromptOpen(true);
     }
@@ -912,6 +932,18 @@ export default function RoomPage() {
           isOpen={isShareModalOpen}
           roomId={roomId}
           onClose={() => setIsShareModalOpen(false)}
+        />
+
+        {/* Mandatory Guest Name Entry Modal (Displayed directly during connecting stage) */}
+        <NamePromptModal
+          isOpen={isNamePromptOpen}
+          roomId={roomId}
+          onJoin={handleGuestNameSubmit}
+          isCamOn={isCamOn}
+          isMicOn={isMicOn}
+          onToggleCam={toggleCam}
+          onToggleMic={toggleMic}
+          localStream={localStream}
         />
       </div>
     );
