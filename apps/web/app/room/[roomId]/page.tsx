@@ -242,8 +242,13 @@ export default function RoomPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (res.status === 404 || data.notFound) {
+          // Room not found or ended: redirect to home page
+          router.replace('/?error=room_not_found');
+          return;
+        }
         throw new Error(data.error || 'Failed to enter this room');
       }
 

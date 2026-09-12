@@ -22,19 +22,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Room ID is required to join' }, { status: 400 });
   }
 
-  // Check if room exists or provision an ephemeral room session for direct link joiners
-  let room = getRoom(cleanRoomId);
+  // Verify room exists in active room store
+  const room = getRoom(cleanRoomId);
   if (!room) {
-    const created = createRoom(cleanRoomId, 'Watch Party', '', 'Host', 12);
-    room = created.room || {
-      roomId: cleanRoomId,
-      roomName: 'Watch Party',
-      hostEmail: '',
-      hostName: 'Host',
-      createdAt: Math.floor(Date.now() / 1000),
-      expiresAt: Math.floor(Date.now() / 1000) + 12 * 3600,
-      kickedIdentities: new Set<string>(),
-    };
+    return NextResponse.json(
+      { error: 'This watch party room has ended or does not exist.', notFound: true },
+      { status: 404 }
+    );
   }
 
   // Determine if caller is the authenticated host of this room

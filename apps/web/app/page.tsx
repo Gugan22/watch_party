@@ -32,6 +32,8 @@ export default function LandingPage() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  const [roomNotFoundError, setRoomNotFoundError] = useState(false);
+
   // Start 100% fresh on each new deployment: clear stale room session storage
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -42,6 +44,13 @@ export default function LandingPage() {
       console.log('[WatchParty] New deployment detected, cleared stale room sessions');
     }
     localStorage.setItem('wp_last_deploy_id', currentDeploy);
+
+    // Check for room_not_found redirect error
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error') === 'room_not_found') {
+      setRoomNotFoundError(true);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
   const toggleTheme = () => {
@@ -272,6 +281,49 @@ export default function LandingPage() {
             Stream movies and videos in sync with up to 10 friends.
           </p>
         </div>
+
+        {/* Room Not Found Alert Banner */}
+        {roomNotFoundError && (
+          <div
+            className="animate-scale-up"
+            style={{
+              marginBottom: '1.5rem',
+              padding: '1rem 1.25rem',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#FCA5A5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+              <div>
+                <strong style={{ display: 'block', color: '#FFFFFF', fontSize: '0.9rem' }}>
+                  Party Room Not Found or Expired
+                </strong>
+                <span style={{ fontSize: '0.8rem' }}>
+                  That watch party has ended or does not exist. You can create a new party room below!
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setRoomNotFoundError(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255, 255, 255, 0.6)',
+                cursor: 'pointer',
+                fontSize: '1rem',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Tab Switcher */}
         <div
