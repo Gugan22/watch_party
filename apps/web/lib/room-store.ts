@@ -34,6 +34,10 @@ export function getActiveRoomCount(): number {
   return roomStore.size;
 }
 
+export function getActiveRoomList(): string[] {
+  return Array.from(roomStore.keys());
+}
+
 export function getRoom(roomId: string): ActiveRoom | undefined {
   const cleanId = roomId.trim().toLowerCase();
   const room = roomStore.get(cleanId);

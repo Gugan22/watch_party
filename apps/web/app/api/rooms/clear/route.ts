@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { clearAllRooms, getActiveRoomCount } from '@/lib/room-store';
+import { clearAllRooms, getActiveRoomCount, getActiveRoomList } from '@/lib/room-store';
 
 // POST: Clears all active rooms from memory
 export async function POST() {
@@ -12,11 +12,12 @@ export async function POST() {
   });
 }
 
-// GET: Returns current active room count
+// GET: Returns current active room count and room IDs
 export async function GET() {
   const count = getActiveRoomCount();
   return NextResponse.json({
     activeRooms: count,
+    rooms: getActiveRoomList(),
     deployId: process.env.NEXT_PUBLIC_DEPLOY_ID || 'fresh',
   });
 }
