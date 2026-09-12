@@ -60,7 +60,9 @@ export class WebRTCMeshManager {
     this.displayName = displayName;
     this.isHost = isHost;
 
-    const topic = `wp-room-${this.roomId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const deployPrefix = (process.env.NEXT_PUBLIC_DEPLOY_ID || 'v1').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 20);
+    const cleanRoom = this.roomId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const topic = `${deployPrefix}-${cleanRoom}`;
     // ?since=now prevents ntfy from replaying old announcements from departed/historical users
     this.sseUrl = `https://ntfy.sh/${topic}/sse?since=now`;
     this.postUrl = `https://ntfy.sh/${topic}`;

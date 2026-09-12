@@ -263,6 +263,16 @@ export default function RoomPage() {
   // Direct check on mount: If Host or valid session name exists, join; otherwise ask for name
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    // Start 100% fresh on each new deployment: clear stale room session storage
+    const currentDeploy = process.env.NEXT_PUBLIC_DEPLOY_ID || 'v1';
+    const lastDeploy = localStorage.getItem('wp_last_deploy_id');
+    if (lastDeploy && lastDeploy !== currentDeploy) {
+      sessionStorage.clear();
+      console.log('[WatchParty] New deployment detected, cleared stale room sessions');
+    }
+    localStorage.setItem('wp_last_deploy_id', currentDeploy);
+
     const ua = navigator.userAgent || '';
     const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;

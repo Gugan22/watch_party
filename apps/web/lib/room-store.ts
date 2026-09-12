@@ -9,12 +9,30 @@ export interface ActiveRoom {
 }
 
 declare global {
-  // Preserve room store across Next.js dev reloads
   var __watchPartyRoomStore: Map<string, ActiveRoom> | undefined;
+  var __watchPartyDeployId: string | undefined;
+}
+
+const currentDeployId = process.env.NEXT_PUBLIC_DEPLOY_ID || 'local';
+
+// Reset room store if deploy ID changed to start 100% fresh on every deployment
+if (global.__watchPartyDeployId !== currentDeployId) {
+  global.__watchPartyRoomStore = new Map<string, ActiveRoom>();
+  global.__watchPartyDeployId = currentDeployId;
 }
 
 const roomStore: Map<string, ActiveRoom> = global.__watchPartyRoomStore ?? new Map<string, ActiveRoom>();
 global.__watchPartyRoomStore = roomStore;
+
+export function clearAllRooms(): number {
+  const count = roomStore.size;
+  roomStore.clear();
+  return count;
+}
+
+export function getActiveRoomCount(): number {
+  return roomStore.size;
+}
 
 export function getRoom(roomId: string): ActiveRoom | undefined {
   const cleanId = roomId.trim().toLowerCase();

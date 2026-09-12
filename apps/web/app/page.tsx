@@ -18,6 +18,8 @@ export default function LandingPage() {
   const [createdRoomUrl, setCreatedRoomUrl] = useState('');
   const [createError, setCreateError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   // Guest join state (zero auth required)
   const [joinRoomId, setJoinRoomId] = useState('');
@@ -30,8 +32,38 @@ export default function LandingPage() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Start 100% fresh on each new deployment: clear stale room session storage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const currentDeploy = process.env.NEXT_PUBLIC_DEPLOY_ID || 'v1';
+    const lastDeploy = localStorage.getItem('wp_last_deploy_id');
+    if (lastDeploy && lastDeploy !== currentDeploy) {
+      sessionStorage.clear();
+      console.log('[WatchParty] New deployment detected, cleared stale room sessions');
+    }
+    localStorage.setItem('wp_last_deploy_id', currentDeploy);
+  }, []);
+
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  // Host: Clear all active rooms and reset fresh
+  const handleClearAllRooms = async () => {
+    if (!confirm('Are you sure you want to clear all active rooms and start fresh?')) return;
+    setIsResetting(true);
+    setResetMessage('');
+    try {
+      const res = await fetch('/api/rooms/clear', { method: 'POST' });
+      const data = await res.json();
+      sessionStorage.clear();
+      setResetMessage(`✓ ${data.message || 'All active rooms cleared!'}`);
+      setTimeout(() => setResetMessage(''), 4000);
+    } catch {
+      setResetMessage('⚠️ Failed to clear active rooms');
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   // Host: Create Room
@@ -406,19 +438,51 @@ export default function LandingPage() {
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{session.user.email}</div>
                     </div>
                   </div>
-                  <span
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={handleClearAllRooms}
+                      disabled={isResetting}
+                      className="tactile-btn tactile-btn-secondary"
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-full)',
+                        border: '1px solid var(--border-subtle)',
+                      }}
+                      title="Clear all active rooms and start completely fresh"
+                    >
+                      {isResetting ? 'Clearing...' : '🧹 Clear All Rooms'}
+                    </button>
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-full)',
+                        background: 'var(--accent-blue-surface)',
+                        color: 'var(--accent-blue)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Authorized Host
+                    </span>
+                  </div>
+                </div>
+
+                {resetMessage && (
+                  <div
                     style={{
-                      fontSize: '0.72rem',
-                      padding: '3px 8px',
-                      borderRadius: 'var(--radius-full)',
-                      background: 'var(--accent-blue-surface)',
-                      color: 'var(--accent-blue)',
+                      padding: '0.6rem 0.85rem',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(34, 197, 94, 0.12)',
+                      color: 'var(--success-green)',
+                      fontSize: '0.82rem',
                       fontWeight: 600,
                     }}
                   >
-                    Authorized Host
-                  </span>
-                </div>
+                    {resetMessage}
+                  </div>
+                )}
 
                 {/* Room Name */}
                 <div>
