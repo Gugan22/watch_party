@@ -28,8 +28,8 @@ export default function RoomPage() {
   // Check if current user is the authorized host
   const isHost = session?.user?.email?.trim().toLowerCase() === HOST_EMAIL;
 
-  // Room lifecycle stage: 'lobby' | 'live' | 'left'
-  const [stage, setStage] = useState<'lobby' | 'live' | 'left'>('lobby');
+  // Room lifecycle stage: 'connecting' | 'live' | 'left'
+  const [stage, setStage] = useState<'connecting' | 'live' | 'left'>('connecting');
 
   // Screen Wake Lock active while watching movie in live stage
   useWakeLock(stage === 'live');
@@ -40,7 +40,7 @@ export default function RoomPage() {
     const ua = navigator.userAgent || '';
     const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
-    const hasSkipped = sessionStorage.getItem('wp_skip_download_prompt') === 'true';
+    const hasSkipped = sessionStorage.getItem('wp_skip_download_prompt') === 'true' || document.cookie.includes('wp_skip_mobile=true');
 
     if (isMobile && !isStandalone && !hasSkipped) {
       router.replace(`/download?roomId=${encodeURIComponent(roomId)}`);
@@ -161,7 +161,7 @@ export default function RoomPage() {
       }
     }
 
-    if (stage === 'lobby' || stage === 'live') {
+    if (stage === 'live') {
       initMedia();
     }
 
@@ -175,10 +175,28 @@ export default function RoomPage() {
     };
   }, [stage]);
 
-  // Join Party Action (Unauthenticated guests welcome)
-  const handleJoinParty = useCallback(async () => {
+  // Join Party Action (Unauthenticated guests welcome, direct link access)
+  const handleJoinParty = useCallback(async (explicitName?: string) => {
     setIsConnecting(true);
     setLobbyError('');
+
+    let nameToUse = explicitName;
+    if (!nameToUse) {
+      if (isHost && session?.user?.name) {
+        nameToUse = `${session.user.name} (Host)`;
+      } else if (isHost) {
+        nameToUse = 'Gugan (Host)';
+      } else {
+        const stored = sessionStorage.getItem(`wp_name_${roomId}`);
+        if (stored) {
+          nameToUse = stored;
+        } else {
+          nameToUse = `Guest-${Math.floor(100 + Math.random() * 900)}`;
+          sessionStorage.setItem(`wp_name_${roomId}`, nameToUse);
+        }
+      }
+    }
+    setDisplayName(nameToUse);
 
     try {
       const res = await fetch('/api/rooms/token', {
@@ -186,7 +204,7 @@ export default function RoomPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           roomId,
-          displayName: displayName || 'Guest',
+          displayName: nameToUse,
         }),
       });
 
@@ -202,7 +220,43 @@ export default function RoomPage() {
     } finally {
       setIsConnecting(false);
     }
-  }, [roomId, displayName]);
+  }, [roomId, isHost, session]);
+
+  // Direct auto-join on mount for desktop or standalone / skipped mobile users
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const ua = navigator.userAgent || '';
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+    const hasSkipped = sessionStorage.getItem('wp_skip_download_prompt') === 'true' || document.cookie.includes('wp_skip_mobile=true');
+
+    if (isMobile && !isStandalone && !hasSkipped) {
+      return;
+    }
+
+    handleJoinParty();
+  }, [handleJoinParty]);
+
+  // Inline display name rename action
+  const handleEditDisplayName = () => {
+    const current = displayName || 'Guest';
+    const newName = window.prompt('Update your display name for this party:', current);
+    if (newName && newName.trim() && newName.trim() !== current) {
+      const clean = newName.trim();
+      setDisplayName(clean);
+      sessionStorage.setItem(`wp_name_${roomId}`, clean);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(),
+          senderId: 'system',
+          senderName: 'System',
+          text: `✏️ ${current} renamed themselves to ${clean}`,
+          timestamp: Date.now(),
+        },
+      ]);
+    }
+  };
 
   // Host Action: Kick / Remove participant
   const handleKickParticipant = async (participantId: string) => {
@@ -385,29 +439,103 @@ export default function RoomPage() {
     isMicOn,
   };
 
-  // View 1: Green Room Lobby
-  if (stage === 'lobby') {
+  // View 1: Connecting Stage (Direct join progress)
+  if (stage === 'connecting') {
     return (
-      <LobbyView
-        roomId={roomId}
-        isCamOn={isCamOn}
-        isMicOn={isMicOn}
-        audioLevel={audioLevel}
-        displayName={displayName}
-        lobbyError={lobbyError}
-        isConnecting={isConnecting}
-        lobbyVideoRef={lobbyVideoRef}
-        onToggleMic={toggleMic}
-        onToggleCam={toggleCam}
-        onDisplayNameChange={setDisplayName}
-        onJoinParty={handleJoinParty}
-      />
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1.5rem',
+          background: 'radial-gradient(ellipse at top, #111827 0%, #030712 100%)',
+          color: '#F9FAFB',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '18px',
+            background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
+            margin: '0 auto 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.5)',
+          }}
+        >
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2">
+            <path d="M4 11a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-5z" />
+            <polygon points="10 9 15 12 10 15 10 9" fill="#FFFFFF" />
+            <circle cx="8" cy="4" r="1.5" />
+            <circle cx="16" cy="4" r="1.5" />
+          </svg>
+        </div>
+
+        {lobbyError ? (
+          <div
+            style={{
+              maxWidth: '420px',
+              padding: '1.5rem',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              borderRadius: '16px',
+            }}
+          >
+            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⚠️</div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>Unable to Enter Room</h3>
+            <p style={{ color: '#FCA5A5', fontSize: '0.85rem', marginBottom: '1.25rem' }}>{lobbyError}</p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => handleJoinParty()}
+                className="tactile-btn tactile-btn-primary"
+                style={{ padding: '0.6rem 1.25rem' }}
+              >
+                Retry Joining
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="tactile-btn tactile-btn-secondary"
+                style={{ padding: '0.6rem 1.25rem' }}
+              >
+                Go to Home
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div
+              style={{
+                width: '40px',
+                height: '40px',
+                border: '3px solid rgba(59, 130, 246, 0.2)',
+                borderTopColor: '#3B82F6',
+                borderRadius: '50%',
+                margin: '0 auto 1.25rem',
+                animation: 'spin 0.8s linear infinite',
+              }}
+            />
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '0.4rem', letterSpacing: '-0.02em' }}>
+              Entering Room: {roomId}
+            </h2>
+            <p style={{ color: '#9CA3AF', fontSize: '0.875rem' }}>
+              Connecting directly to live cinema room & ephemeral sync...
+            </p>
+          </div>
+        )}
+      </div>
     );
   }
 
   // View 2: Post-Call Room Left
   if (stage === 'left') {
-    return <PostCallView onRejoin={() => setStage('lobby')} />;
+    return <PostCallView onRejoin={() => handleJoinParty()} />;
   }
 
   // View 3: Active Live Room
@@ -430,7 +558,7 @@ export default function RoomPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <span style={{ fontSize: '1.1rem' }}>🎬</span>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h2 style={{ fontSize: '0.95rem', fontWeight: 700 }}>{roomId}</h2>
                 {isHost && (
                   <span
@@ -446,6 +574,28 @@ export default function RoomPage() {
                     HOST
                   </span>
                 )}
+                {/* Editable Display Name Badge */}
+                <button
+                  type="button"
+                  onClick={handleEditDisplayName}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'var(--bg-raised)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-full)',
+                    padding: '2px 8px',
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                  }}
+                  title="Click to change your display name"
+                >
+                  <span>👤</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{displayName || 'Guest'}</span>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>✏️</span>
+                </button>
               </div>
               <span style={{ fontSize: '0.72rem', color: 'var(--success-green)', fontWeight: 600 }}>
                 ● {participants.length + 1} Participants Synced

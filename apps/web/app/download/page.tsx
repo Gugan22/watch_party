@@ -23,10 +23,15 @@ function DownloadContent() {
       setPlatform('desktop');
     }
 
-    // Check if already in standalone app
+    // Check if already in standalone app (PWA or Capacitor)
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
     if (isStandalone) {
       setIsInstalled(true);
+      if (roomId) {
+        document.cookie = 'wp_skip_mobile=true; path=/; max-age=86400';
+        sessionStorage.setItem('wp_skip_download_prompt', 'true');
+        router.replace(`/room/${encodeURIComponent(roomId)}?browser=true`);
+      }
     }
 
     // Capture PWA install prompt for Android/Chrome
@@ -37,7 +42,7 @@ function DownloadContent() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
-  }, []);
+  }, [roomId, router]);
 
   const handleInstallPWA = async () => {
     if (deferredPrompt) {
@@ -53,11 +58,12 @@ function DownloadContent() {
   };
 
   const handleContinueToRoom = () => {
+    document.cookie = 'wp_skip_mobile=true; path=/; max-age=86400';
     sessionStorage.setItem('wp_skip_download_prompt', 'true');
     if (roomId) {
-      router.push(`/room/${encodeURIComponent(roomId)}`);
+      router.push(`/room/${encodeURIComponent(roomId)}?browser=true`);
     } else {
-      router.push('/');
+      router.push('/?browser=true');
     }
   };
 

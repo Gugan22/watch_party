@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { AccessToken } from 'livekit-server-sdk';
-import { getRoom, isParticipantKicked } from '@/lib/room-store';
+import { getRoom, createRoom, isParticipantKicked } from '@/lib/room-store';
 
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'devkey';
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'secret12345678901234567890123456789012';
@@ -23,13 +23,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Room ID is required to join' }, { status: 400 });
   }
 
-  // Check if room exists
-  const room = getRoom(cleanRoomId);
+  // Check if room exists or provision an ephemeral room session for direct link joiners
+  let room = getRoom(cleanRoomId);
   if (!room) {
-    return NextResponse.json(
-      { error: `Room "${cleanRoomId}" was not found or has expired. Please verify the Room ID.` },
-      { status: 404 }
-    );
+    const created = createRoom(cleanRoomId, '', 'Host', 12);
+    room = created.room || {
+      roomId: cleanRoomId,
+      hostEmail: '',
+      hostName: 'Host',
+      createdAt: Math.floor(Date.now() / 1000),
+      expiresAt: Math.floor(Date.now() / 1000) + 12 * 3600,
+      kickedIdentities: new Set<string>(),
+    };
   }
 
   // Determine if caller is the authenticated host
