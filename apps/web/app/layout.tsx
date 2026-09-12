@@ -8,7 +8,7 @@ export const metadata: Metadata = {
       ? process.env.NEXTAUTH_URL
       : 'http://localhost:3000'
   ),
-  title: 'WatchParty — Zero-Persistence Private Cinema',
+  title: 'WatchParty — Synchronized Cinema',
   description: 'Self-hosted, encrypted, real-time synchronized watch party with crystal clear AV and dynamic theater layouts.',
   manifest: '/manifest.json',
   appleWebApp: {
