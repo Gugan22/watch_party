@@ -112,16 +112,29 @@ export class WebRTCMeshManager {
     const audioTrack = stream ? stream.getAudioTracks()[0] : null;
     const videoTrack = stream ? stream.getVideoTracks()[0] : null;
 
+    if (audioTrack) audioTrack.enabled = isMicOn;
+    if (videoTrack) videoTrack.enabled = isCamOn;
+
     this.peerConnections.forEach((pc) => {
       const transceivers = pc.getTransceivers();
-      transceivers.forEach((t) => {
-        const kind = t.receiver.track?.kind;
-        if (kind === 'audio') {
-          t.sender.replaceTrack(audioTrack && isMicOn ? audioTrack : null).catch(() => {});
-        } else if (kind === 'video') {
-          t.sender.replaceTrack(videoTrack && isCamOn ? videoTrack : null).catch(() => {});
-        }
-      });
+      const audioTransceiver = transceivers.find((t) => t.sender.track?.kind === 'audio' || t.receiver.track?.kind === 'audio');
+      const videoTransceiver = transceivers.find((t) => t.sender.track?.kind === 'video' || t.receiver.track?.kind === 'video');
+
+      if (videoTransceiver) {
+        videoTransceiver.sender.replaceTrack(videoTrack && isCamOn ? videoTrack : null).catch(() => {});
+      } else if (videoTrack && pc.signalingState === 'stable') {
+        try {
+          pc.addTrack(videoTrack, stream!);
+        } catch {}
+      }
+
+      if (audioTransceiver) {
+        audioTransceiver.sender.replaceTrack(audioTrack && isMicOn ? audioTrack : null).catch(() => {});
+      } else if (audioTrack && pc.signalingState === 'stable') {
+        try {
+          pc.addTrack(audioTrack, stream!);
+        } catch {}
+      }
     });
 
     this.broadcastMediaToggle(isCamOn, isMicOn);
@@ -311,8 +324,12 @@ export class WebRTCMeshManager {
         } else {
           const p = this.remotePeers.get(remotePeerId)!;
           p.lastSeen = Date.now();
-          if (signal.name && signal.name !== p.name) {
-            p.name = signal.name;
+          const camVal = typeof signal.isCamOn === 'boolean' ? signal.isCamOn : p.isCamOn;
+          const micVal = typeof signal.isMicOn === 'boolean' ? signal.isMicOn : p.isMicOn;
+          if (camVal !== p.isCamOn || micVal !== p.isMicOn || (signal.name && signal.name !== p.name)) {
+            p.isCamOn = camVal;
+            p.isMicOn = micVal;
+            if (signal.name) p.name = signal.name;
             this.emit('peerMediaChanged', remotePeerId, p.isCamOn, p.isMicOn);
           }
         }
@@ -428,26 +445,45 @@ export class WebRTCMeshManager {
 
     pc = new RTCPeerConnection(RTC_CONFIG);
 
-    // Pre-negotiate audio and video transceivers
-    try {
-      pc.addTransceiver('audio', { direction: 'sendrecv' });
-      pc.addTransceiver('video', { direction: 'sendrecv' });
-    } catch (e) {
-      console.warn('[WebRTC] addTransceiver fallback:', e);
-    }
-
-    // Attach local stream tracks to transceivers if stream already exists
+    // Attach local stream tracks directly or pre-negotiate transceivers
     if (this.localStream) {
       const audioTrack = this.localStream.getAudioTracks()[0];
       const videoTrack = this.localStream.getVideoTracks()[0];
-      pc.getTransceivers().forEach((t) => {
-        const kind = t.receiver.track?.kind;
-        if (kind === 'audio' && audioTrack) {
-          t.sender.replaceTrack(this.isMicOn ? audioTrack : null).catch(() => {});
-        } else if (kind === 'video' && videoTrack) {
-          t.sender.replaceTrack(this.isCamOn ? videoTrack : null).catch(() => {});
+
+      if (audioTrack) {
+        audioTrack.enabled = this.isMicOn;
+        try {
+          pc.addTrack(audioTrack, this.localStream);
+        } catch {
+          try {
+            pc.addTransceiver(audioTrack, { direction: 'sendrecv', streams: [this.localStream] });
+          } catch {}
         }
-      });
+      } else {
+        try {
+          pc.addTransceiver('audio', { direction: 'sendrecv' });
+        } catch {}
+      }
+
+      if (videoTrack) {
+        videoTrack.enabled = this.isCamOn;
+        try {
+          pc.addTrack(videoTrack, this.localStream);
+        } catch {
+          try {
+            pc.addTransceiver(videoTrack, { direction: 'sendrecv', streams: [this.localStream] });
+          } catch {}
+        }
+      } else {
+        try {
+          pc.addTransceiver('video', { direction: 'sendrecv' });
+        } catch {}
+      }
+    } else {
+      try {
+        pc.addTransceiver('audio', { direction: 'sendrecv' });
+        pc.addTransceiver('video', { direction: 'sendrecv' });
+      } catch {}
     }
 
     // Handle remote tracks and emit a fresh stream clone to force React UI update
@@ -460,6 +496,10 @@ export class WebRTCMeshManager {
             peer.stream.addTrack(track);
           }
         });
+        if (event.track.kind === 'video') {
+          peer.isCamOn = true;
+          this.emit('peerMediaChanged', remotePeerId, true, peer.isMicOn);
+        }
         const freshStream = new MediaStream(peer.stream.getTracks());
         peer.stream = freshStream;
         peer.lastSeen = Date.now();

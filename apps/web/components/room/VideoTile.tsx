@@ -45,10 +45,15 @@ export const VideoTile: React.FC<VideoTileProps> = ({
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Check if stream has live video tracks
+  const hasLiveVideoTrack = Boolean(
+    activeStream &&
+    activeStream.getVideoTracks().some((t) => t.readyState === 'live')
+  );
+
   const hasVideoTrack = Boolean(
     activeStream &&
     activeStream.getVideoTracks().length > 0 &&
-    participant.isCamOn
+    (participant.isCamOn || hasLiveVideoTrack)
   );
 
   // Bind video element whenever stream, camera, or video track state updates
@@ -147,7 +152,7 @@ export const VideoTile: React.FC<VideoTileProps> = ({
           }}
           autoPlay
           playsInline
-          muted={isSelf} // Self MUST be muted to prevent local audio echo loop
+          muted={true} // Dedicated <audio> tag below plays remote sound; <video> must be muted to satisfy browser autoplay requirements!
           style={{
             width: '100%',
             height: '100%',
