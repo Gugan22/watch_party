@@ -7,6 +7,7 @@ export interface RemotePeerInfo {
   isMicOn: boolean;
   isSpeaking: boolean;
   stream: MediaStream;
+  lastSeen: number;
 }
 
 export type WebRTCEventMap = {
@@ -17,6 +18,7 @@ export type WebRTCEventMap = {
   chatMessage: (msg: ChatMessage) => void;
   reaction: (emoji: string, name: string) => void;
   playerSync: (action: 'play' | 'pause' | 'seek', time: number, url?: string) => void;
+  kicked: () => void;
 };
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -39,12 +41,15 @@ export class WebRTCMeshManager {
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
   private remotePeers: Map<string, RemotePeerInfo> = new Map();
   private pendingCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
+  private kickedPeerIds: Set<string> = new Set();
 
   private eventSource: EventSource | null = null;
   private sseUrl: string;
   private postUrl: string;
   private destroyed = false;
   private heartbeatInterval: any = null;
+  private reaperInterval: any = null;
+  private unloadHandler: any = null;
 
   // Event listeners
   private listeners: { [K in keyof WebRTCEventMap]?: WebRTCEventMap[K][] } = {};
@@ -56,10 +61,22 @@ export class WebRTCMeshManager {
     this.isHost = isHost;
 
     const topic = `wp-room-${this.roomId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
-    this.sseUrl = `https://ntfy.sh/${topic}/sse`;
+    // ?since=now prevents ntfy from replaying old announcements from departed/historical users
+    this.sseUrl = `https://ntfy.sh/${topic}/sse?since=now`;
     this.postUrl = `https://ntfy.sh/${topic}`;
 
     this.initSignaling();
+    this.initReaper();
+
+    if (typeof window !== 'undefined') {
+      this.unloadHandler = () => {
+        try {
+          const payload = JSON.stringify({ type: 'leave', peerId: this.localPeerId });
+          navigator.sendBeacon(this.postUrl, payload);
+        } catch {}
+      };
+      window.addEventListener('beforeunload', this.unloadHandler);
+    }
   }
 
   public on<K extends keyof WebRTCEventMap>(event: K, listener: WebRTCEventMap[K]) {
@@ -74,6 +91,18 @@ export class WebRTCMeshManager {
     if (list) {
       list.forEach((fn) => (fn as any)(...args));
     }
+  }
+
+  // Update local display name dynamically if changed
+  public updateDisplayName(newName: string) {
+    this.displayName = newName;
+    this.broadcast({
+      type: 'heartbeat',
+      peerId: this.localPeerId,
+      name: newName,
+      isCamOn: this.isCamOn,
+      isMicOn: this.isMicOn,
+    });
   }
 
   // Set or update local audio/video media stream with transceiver replaceTrack
@@ -135,7 +164,7 @@ export class WebRTCMeshManager {
         // EventSource auto-reconnects natively
       };
 
-      // Periodic presence broadcast every 6 seconds
+      // Periodic presence broadcast every 5 seconds
       this.heartbeatInterval = setInterval(() => {
         if (!this.destroyed) {
           this.broadcast({
@@ -146,10 +175,30 @@ export class WebRTCMeshManager {
             isMicOn: this.isMicOn,
           });
         }
-      }, 6000);
+      }, 5000);
     } catch (err) {
       console.warn('[WebRTC] SSE signaling init error:', err);
     }
+  }
+
+  // Sweep and clean up stale peers who left abruptly without explicit leave signal
+  private initReaper() {
+    this.reaperInterval = setInterval(() => {
+      if (this.destroyed) return;
+      const now = Date.now();
+      const deadPeerIds: string[] = [];
+
+      this.remotePeers.forEach((peer, peerId) => {
+        const pc = this.peerConnections.get(peerId);
+        const isDisconnected = pc && (pc.connectionState === 'closed' || pc.connectionState === 'failed');
+        // If peer hasn't sent a heartbeat for > 12 seconds or connection died, prune
+        if (now - peer.lastSeen > 12000 || isDisconnected) {
+          deadPeerIds.push(peerId);
+        }
+      });
+
+      deadPeerIds.forEach((id) => this.removePeer(id));
+    }, 4000);
   }
 
   // Send signal message to ntfy topic
@@ -168,8 +217,16 @@ export class WebRTCMeshManager {
 
   // Dispatch incoming signals
   private async handleSignal(signal: any) {
-    if (!signal || signal.peerId === this.localPeerId || signal.from === this.localPeerId) {
-      return;
+    if (!signal) return;
+    const senderId = signal.peerId || signal.from;
+    if (senderId === this.localPeerId) return;
+
+    // Ignore any signals from kicked participants
+    if (senderId && this.kickedPeerIds.has(senderId)) return;
+
+    // Update lastSeen timestamp on sender
+    if (senderId && this.remotePeers.has(senderId)) {
+      this.remotePeers.get(senderId)!.lastSeen = Date.now();
     }
 
     switch (signal.type) {
@@ -217,6 +274,13 @@ export class WebRTCMeshManager {
           if (this.localPeerId > remotePeerId) {
             this.initiateCall(remotePeerId);
           }
+        } else {
+          const p = this.remotePeers.get(remotePeerId)!;
+          p.lastSeen = Date.now();
+          if (signal.name && signal.name !== p.name) {
+            p.name = signal.name;
+            this.emit('peerMediaChanged', remotePeerId, p.isCamOn, p.isMicOn);
+          }
         }
         break;
       }
@@ -244,6 +308,7 @@ export class WebRTCMeshManager {
         if (peer) {
           peer.isCamOn = Boolean(signal.isCamOn);
           peer.isMicOn = Boolean(signal.isMicOn);
+          peer.lastSeen = Date.now();
           this.emit('peerMediaChanged', signal.peerId, peer.isCamOn, peer.isMicOn);
         }
         break;
@@ -270,6 +335,16 @@ export class WebRTCMeshManager {
         break;
       }
 
+      case 'kick': {
+        if (signal.targetId === this.localPeerId) {
+          this.emit('kicked');
+        } else if (signal.targetId) {
+          this.kickedPeerIds.add(signal.targetId);
+          this.removePeer(signal.targetId);
+        }
+        break;
+      }
+
       case 'leave': {
         this.removePeer(signal.peerId);
         break;
@@ -279,11 +354,14 @@ export class WebRTCMeshManager {
 
   // Register remote peer in internal maps & emit event
   private registerRemotePeer(peerId: string, name: string, isCamOn: boolean, isMicOn: boolean) {
+    if (this.kickedPeerIds.has(peerId)) return;
+
     if (this.remotePeers.has(peerId)) {
       const existing = this.remotePeers.get(peerId)!;
       existing.name = name;
       existing.isCamOn = isCamOn;
       existing.isMicOn = isMicOn;
+      existing.lastSeen = Date.now();
       this.emit('peerMediaChanged', peerId, isCamOn, isMicOn);
       return;
     }
@@ -295,6 +373,7 @@ export class WebRTCMeshManager {
       isMicOn,
       isSpeaking: false,
       stream: new MediaStream(),
+      lastSeen: Date.now(),
     };
 
     this.remotePeers.set(peerId, peerInfo);
@@ -342,6 +421,7 @@ export class WebRTCMeshManager {
         });
         const freshStream = new MediaStream(peer.stream.getTracks());
         peer.stream = freshStream;
+        peer.lastSeen = Date.now();
         this.emit('peerStreamUpdated', remotePeerId, freshStream);
       }
     };
@@ -355,6 +435,12 @@ export class WebRTCMeshManager {
           to: remotePeerId,
           candidate: event.candidate.toJSON(),
         });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc?.connectionState === 'failed' || pc?.connectionState === 'closed') {
+        this.removePeer(remotePeerId);
       }
     };
 
@@ -453,6 +539,17 @@ export class WebRTCMeshManager {
     }
   }
 
+  // Host Action: Kick a participant
+  public kickParticipant(targetPeerId: string) {
+    this.kickedPeerIds.add(targetPeerId);
+    this.removePeer(targetPeerId);
+    this.broadcast({
+      type: 'kick',
+      peerId: this.localPeerId,
+      targetId: targetPeerId,
+    });
+  }
+
   // Public broadcasts for application features
   public broadcastMediaToggle(isCamOn: boolean, isMicOn: boolean) {
     this.isCamOn = isCamOn;
@@ -509,6 +606,12 @@ export class WebRTCMeshManager {
     this.destroyed = true;
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
+    }
+    if (this.reaperInterval) {
+      clearInterval(this.reaperInterval);
+    }
+    if (this.unloadHandler && typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.unloadHandler);
     }
 
     // Broadcast leave

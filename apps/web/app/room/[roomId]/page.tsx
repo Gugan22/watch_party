@@ -15,6 +15,7 @@ import { ChatDrawer } from '@/components/room/ChatDrawer';
 import { CountdownModal } from '@/components/room/CountdownModal';
 import { PostCallView } from '@/components/room/PostCallView';
 import { ShareRoomModal } from '@/components/room/ShareRoomModal';
+import { NamePromptModal } from '@/components/room/NamePromptModal';
 import { WebRTCMeshManager } from '@/lib/webrtc-mesh';
 
 type LayoutMode = 'spotlight' | 'grid' | 'sidebar';
@@ -32,6 +33,9 @@ export default function RoomPage() {
 
   // Share party link popup modal (auto-triggered on ?share=true or host manual click)
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Mandatory guest name entry modal before entering the room
+  const [isNamePromptOpen, setIsNamePromptOpen] = useState(false);
 
   // Check URL query parameters for ?share=true
   useEffect(() => {
@@ -197,11 +201,8 @@ export default function RoomPage() {
     }
   }, [requestMedia]);
 
-  // Join Party Action (Unauthenticated guests welcome, direct link access)
+  // Join Party Action (Mandatory name enforced for guests)
   const handleJoinParty = useCallback(async (explicitName?: string) => {
-    setIsConnecting(true);
-    setLobbyError('');
-
     let nameToUse = explicitName;
     if (!nameToUse) {
       if (isHost && session?.user?.name) {
@@ -209,15 +210,19 @@ export default function RoomPage() {
       } else if (isHost) {
         nameToUse = 'Host';
       } else {
-        const stored = sessionStorage.getItem(`wp_name_${roomId}`);
-        if (stored) {
-          nameToUse = stored;
+        const stored = sessionStorage.getItem(`wp_name_${roomId}`) || localStorage.getItem('wp_user_display_name');
+        if (stored && stored.trim().length >= 2) {
+          nameToUse = stored.trim();
         } else {
-          nameToUse = `Guest-${Math.floor(100 + Math.random() * 900)}`;
-          sessionStorage.setItem(`wp_name_${roomId}`, nameToUse);
+          // Mandatory name entry required
+          setIsNamePromptOpen(true);
+          return;
         }
       }
     }
+
+    setIsConnecting(true);
+    setLobbyError('');
     setDisplayName(nameToUse);
 
     try {
@@ -248,7 +253,14 @@ export default function RoomPage() {
     }
   }, [roomId, isHost, session]);
 
-  // Direct auto-join on mount for desktop or standalone / skipped mobile users
+  // Guest name submission from NamePromptModal
+  const handleGuestNameSubmit = (enteredName: string) => {
+    setIsNamePromptOpen(false);
+    setDisplayName(enteredName);
+    handleJoinParty(enteredName);
+  };
+
+  // Direct check on mount: If Host or valid session name exists, join; otherwise ask for name
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const ua = navigator.userAgent || '';
@@ -260,8 +272,18 @@ export default function RoomPage() {
       return;
     }
 
-    handleJoinParty();
-  }, [handleJoinParty]);
+    if (isHost && session?.user?.name) {
+      handleJoinParty(`${session.user.name} (Host)`);
+      return;
+    }
+
+    const sessionName = sessionStorage.getItem(`wp_name_${roomId}`);
+    if (sessionName && sessionName.trim().length >= 2) {
+      handleJoinParty(sessionName.trim());
+    } else {
+      setIsNamePromptOpen(true);
+    }
+  }, [handleJoinParty, isHost, session, roomId]);
 
   // Real-time WebRTC Mesh Connection: Synchronizes video, audio, chat, and movie state across peers
   useEffect(() => {
@@ -386,6 +408,12 @@ export default function RoomPage() {
       }
     });
 
+    // Remote kicked handler
+    mesh.on('kicked', () => {
+      alert('🚫 You have been removed from this party by the host.');
+      setStage('left');
+    });
+
     return () => {
       mesh.destroy();
       meshRef.current = null;
@@ -426,13 +454,16 @@ export default function RoomPage() {
     const targetName = target ? target.name : 'Participant';
 
     try {
+      // Instant peer-to-peer removal via mesh
+      meshRef.current?.kickParticipant(participantId);
+
       await fetch('/api/rooms/kick', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId, participantId }),
       });
 
-      // Remove from active participants
+      // Remove from active participants locally
       setParticipants((prev) => prev.filter((p) => p.id !== participantId));
 
       // Post in chat
@@ -514,6 +545,29 @@ export default function RoomPage() {
     meshRef.current?.broadcastMediaToggle(isCamOn, nextMic);
   };
 
+  // Camera error helper with Edge & Lenovo Vantage guidance
+  const handleCameraError = (err: any) => {
+    console.error('Camera access error:', err);
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      alert(
+        '📷 Camera Access Blocked in Microsoft Edge:\n\n' +
+        '1. Look at the top address bar next to https://\n' +
+        '2. Click the lock 🔒 or camera 📷 icon.\n' +
+        '3. Change Camera permission from "Block" to "Allow".\n' +
+        '4. Click the Camera button again to enable.'
+      );
+    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+      alert(
+        '📷 Camera In Use / Privacy Lock Detected:\n\n' +
+        'Your webcam cannot be opened because another app is holding it, or Lenovo Vantage Camera Privacy is ON.\n\n' +
+        '• If you are on a Lenovo laptop, open Lenovo Vantage and turn OFF "Camera Privacy Mode" (or press Fn+F10).\n' +
+        '• Close Zoom, Teams, or other browser tabs using your camera, then try again.'
+      );
+    } else {
+      alert(`Unable to access camera: ${err.message || err.name || 'Unknown hardware error'}`);
+    }
+  };
+
   const toggleCam = async () => {
     if (!localStream) {
       try {
@@ -521,8 +575,8 @@ export default function RoomPage() {
         setLocalStream(stream);
         setIsCamOn(true);
         meshRef.current?.setLocalStream(stream, true, isMicOn);
-      } catch (err) {
-        console.warn('Camera permission error:', err);
+      } catch (err: any) {
+        handleCameraError(err);
       }
       return;
     }
@@ -531,11 +585,13 @@ export default function RoomPage() {
       try {
         const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
         const newTrack = newStream.getVideoTracks()[0];
-        localStream.addTrack(newTrack);
+        // Fresh MediaStream instance so React state updates and VideoTile re-renders!
+        const updatedStream = new MediaStream([...localStream.getAudioTracks(), newTrack]);
+        setLocalStream(updatedStream);
         setIsCamOn(true);
-        meshRef.current?.setLocalStream(localStream, true, isMicOn);
-      } catch (err) {
-        console.warn('Camera track error:', err);
+        meshRef.current?.setLocalStream(updatedStream, true, isMicOn);
+      } catch (err: any) {
+        handleCameraError(err);
       }
       return;
     }
@@ -544,7 +600,7 @@ export default function RoomPage() {
       track.enabled = nextCam;
     });
     setIsCamOn(nextCam);
-    meshRef.current?.broadcastMediaToggle(nextCam, isMicOn);
+    meshRef.current?.setLocalStream(localStream, nextCam, isMicOn);
   };
 
   // Fullscreen Theater toggle
@@ -1251,6 +1307,18 @@ export default function RoomPage() {
         isOpen={isShareModalOpen}
         roomId={roomId}
         onClose={() => setIsShareModalOpen(false)}
+      />
+
+      {/* Mandatory Guest Name Entry Modal */}
+      <NamePromptModal
+        isOpen={isNamePromptOpen}
+        roomId={roomId}
+        onJoin={handleGuestNameSubmit}
+        isCamOn={isCamOn}
+        isMicOn={isMicOn}
+        onToggleCam={toggleCam}
+        onToggleMic={toggleMic}
+        localStream={localStream}
       />
     </div>
   );
