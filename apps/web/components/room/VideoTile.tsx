@@ -42,17 +42,24 @@ export const VideoTile: React.FC<VideoTileProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Bind video element whenever stream or camera state updates
+  // Check if stream has live video tracks
+  const hasVideoTrack = Boolean(
+    activeStream &&
+    activeStream.getVideoTracks().length > 0 &&
+    participant.isCamOn
+  );
+
+  // Bind video element whenever stream, camera, or video track state updates
   useEffect(() => {
-    if (videoRef.current && activeStream && participant.isCamOn) {
+    if (videoRef.current && activeStream && hasVideoTrack) {
       if (videoRef.current.srcObject !== activeStream) {
         videoRef.current.srcObject = activeStream;
       }
       videoRef.current.play().catch(() => {});
     }
-  }, [activeStream, participant.isCamOn]);
+  }, [activeStream, hasVideoTrack]);
 
-  // Bind audio element for remote participants (unmuted, so you hear them even if cam is off)
+  // Bind audio element for remote participants (unmuted, plays even if camera is off)
   useEffect(() => {
     if (!isSelf && audioRef.current && activeStream) {
       if (audioRef.current.srcObject !== activeStream) {
@@ -125,9 +132,17 @@ export const VideoTile: React.FC<VideoTileProps> = ({
             Click to Enable Camera
           </span>
         </button>
-      ) : participant.isCamOn && activeStream ? (
+      ) : hasVideoTrack ? (
         <video
-          ref={videoRef}
+          ref={(el) => {
+            if (el && activeStream) {
+              if (el.srcObject !== activeStream) {
+                el.srcObject = activeStream;
+              }
+              el.play().catch(() => {});
+            }
+            (videoRef as any).current = el;
+          }}
           autoPlay
           playsInline
           muted={isSelf} // Self MUST be muted to prevent local audio echo loop

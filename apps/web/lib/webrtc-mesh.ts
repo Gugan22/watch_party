@@ -76,29 +76,25 @@ export class WebRTCMeshManager {
     }
   }
 
-  // Set or update local audio/video media stream
+  // Set or update local audio/video media stream with transceiver replaceTrack
   public setLocalStream(stream: MediaStream | null, isCamOn = true, isMicOn = true) {
     this.localStream = stream;
     this.isCamOn = isCamOn;
     this.isMicOn = isMicOn;
 
-    // Update active tracks across all peer connections
+    const audioTrack = stream ? stream.getAudioTracks()[0] : null;
+    const videoTrack = stream ? stream.getVideoTracks()[0] : null;
+
     this.peerConnections.forEach((pc) => {
-      const senders = pc.getSenders();
-      if (stream) {
-        stream.getTracks().forEach((track) => {
-          const sender = senders.find((s) => s.track?.kind === track.kind);
-          if (sender) {
-            sender.replaceTrack(track).catch(() => {});
-          } else {
-            try {
-              pc.addTrack(track, stream);
-            } catch (e) {
-              console.warn('[WebRTC] addTrack warning:', e);
-            }
-          }
-        });
-      }
+      const transceivers = pc.getTransceivers();
+      transceivers.forEach((t) => {
+        const kind = t.receiver.track?.kind;
+        if (kind === 'audio') {
+          t.sender.replaceTrack(audioTrack && isMicOn ? audioTrack : null).catch(() => {});
+        } else if (kind === 'video') {
+          t.sender.replaceTrack(videoTrack && isCamOn ? videoTrack : null).catch(() => {});
+        }
+      });
     });
 
     this.broadcastMediaToggle(isCamOn, isMicOn);
@@ -139,7 +135,7 @@ export class WebRTCMeshManager {
         // EventSource auto-reconnects natively
       };
 
-      // Periodic presence broadcast every 8 seconds
+      // Periodic presence broadcast every 6 seconds
       this.heartbeatInterval = setInterval(() => {
         if (!this.destroyed) {
           this.broadcast({
@@ -150,7 +146,7 @@ export class WebRTCMeshManager {
             isMicOn: this.isMicOn,
           });
         }
-      }, 8000);
+      }, 6000);
     } catch (err) {
       console.warn('[WebRTC] SSE signaling init error:', err);
     }
@@ -305,52 +301,60 @@ export class WebRTCMeshManager {
     this.emit('peerJoined', peerInfo);
   }
 
-  // Create or get RTCPeerConnection
+  // Create or get RTCPeerConnection with pre-negotiated transceivers
   private getOrCreatePeerConnection(remotePeerId: string): RTCPeerConnection {
     let pc = this.peerConnections.get(remotePeerId);
     if (pc) return pc;
 
     pc = new RTCPeerConnection(RTC_CONFIG);
 
-    // Attach local stream tracks
+    // Pre-negotiate audio and video transceivers
+    try {
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      pc.addTransceiver('video', { direction: 'sendrecv' });
+    } catch (e) {
+      console.warn('[WebRTC] addTransceiver fallback:', e);
+    }
+
+    // Attach local stream tracks to transceivers if stream already exists
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
-        try {
-          pc!.addTrack(track, this.localStream!);
-        } catch (e) {
-          console.warn('[WebRTC] addTrack err:', e);
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      const videoTrack = this.localStream.getVideoTracks()[0];
+      pc.getTransceivers().forEach((t) => {
+        const kind = t.receiver.track?.kind;
+        if (kind === 'audio' && audioTrack) {
+          t.sender.replaceTrack(this.isMicOn ? audioTrack : null).catch(() => {});
+        } else if (kind === 'video' && videoTrack) {
+          t.sender.replaceTrack(this.isCamOn ? videoTrack : null).catch(() => {});
         }
       });
     }
 
-    // Handle remote tracks
+    // Handle remote tracks and emit a fresh stream clone to force React UI update
     pc.ontrack = (event) => {
       const peer = this.remotePeers.get(remotePeerId);
       if (peer) {
-        event.streams[0]?.getTracks().forEach((track) => {
+        const stream = event.streams[0] || new MediaStream([event.track]);
+        stream.getTracks().forEach((track) => {
           if (!peer.stream.getTracks().some((t) => t.id === track.id)) {
             peer.stream.addTrack(track);
           }
         });
-        this.emit('peerStreamUpdated', remotePeerId, peer.stream);
+        const freshStream = new MediaStream(peer.stream.getTracks());
+        peer.stream = freshStream;
+        this.emit('peerStreamUpdated', remotePeerId, freshStream);
       }
     };
 
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
-      if (event.candidate) {
+      if (event.candidate && event.candidate.candidate) {
         this.broadcast({
           type: 'candidate',
           from: this.localPeerId,
           to: remotePeerId,
           candidate: event.candidate.toJSON(),
         });
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc?.connectionState === 'failed' || pc?.connectionState === 'closed') {
-        // Can re-attempt or clean up
       }
     };
 
@@ -389,7 +393,9 @@ export class WebRTCMeshManager {
       const pending = this.pendingCandidates.get(remotePeerId) || [];
       for (const cand of pending) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(cand));
+          if (cand && cand.candidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(cand));
+          }
         } catch {}
       }
       this.pendingCandidates.delete(remotePeerId);
@@ -418,7 +424,9 @@ export class WebRTCMeshManager {
         const pending = this.pendingCandidates.get(remotePeerId) || [];
         for (const cand of pending) {
           try {
-            await pc.addIceCandidate(new RTCIceCandidate(cand));
+            if (cand && cand.candidate) {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            }
           } catch {}
         }
         this.pendingCandidates.delete(remotePeerId);
@@ -432,7 +440,7 @@ export class WebRTCMeshManager {
   private async handleCandidate(remotePeerId: string, candidate: RTCIceCandidateInit) {
     try {
       const pc = this.peerConnections.get(remotePeerId);
-      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+      if (pc && pc.remoteDescription && pc.remoteDescription.type && candidate && candidate.candidate) {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } else {
         if (!this.pendingCandidates.has(remotePeerId)) {
