@@ -34,6 +34,19 @@ export default function RoomPage() {
   // Screen Wake Lock active while watching movie in live stage
   useWakeLock(stage === 'live');
 
+  // Mobile App Navigation: If accessed on mobile browser outside of installed PWA, redirect to download page
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const ua = navigator.userAgent || '';
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+    const hasSkipped = sessionStorage.getItem('wp_skip_download_prompt') === 'true';
+
+    if (isMobile && !isStandalone && !hasSkipped) {
+      router.replace(`/download?roomId=${encodeURIComponent(roomId)}`);
+    }
+  }, [roomId, router]);
+
   // Lobby AV state
   const [displayName, setDisplayName] = useState('');
   const [isMicOn, setIsMicOn] = useState(true);
