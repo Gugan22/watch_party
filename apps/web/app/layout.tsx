@@ -3,6 +3,11 @@ import type { Metadata, Viewport } from 'next';
 import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL.startsWith('http')
+      ? process.env.NEXTAUTH_URL
+      : 'http://localhost:3000'
+  ),
   title: 'WatchParty — Zero-Persistence Private Cinema',
   description: 'Self-hosted, encrypted, real-time synchronized watch party with crystal clear AV and dynamic theater layouts.',
   manifest: '/manifest.json',
