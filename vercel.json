@@ -1,4 +1,4 @@
 {
-  "buildCommand": "pnpm --filter web build",
+  "buildCommand": "pnpm --filter @watch-party/shared build && pnpm --filter web build",
   "outputDirectory": "apps/web/.next"
 }

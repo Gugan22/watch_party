@@ -22,7 +22,9 @@
       "@/*": ["./*"],
       "@components/*": ["./components/*"],
       "@hooks/*": ["./hooks/*"],
-      "@lib/*": ["./lib/*"]
+      "@lib/*": ["./lib/*"],
+      "@watch-party/shared": ["../../packages/shared/src/index.ts"],
+      "@watch-party/shared/*": ["../../packages/shared/src/*"]
     },
     "plugins": [
       {
