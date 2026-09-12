@@ -14,6 +14,7 @@ import { FloatingDock } from '@/components/room/FloatingDock';
 import { ChatDrawer } from '@/components/room/ChatDrawer';
 import { CountdownModal } from '@/components/room/CountdownModal';
 import { PostCallView } from '@/components/room/PostCallView';
+import { ShareRoomModal } from '@/components/room/ShareRoomModal';
 
 type LayoutMode = 'spotlight' | 'grid' | 'sidebar';
 
@@ -24,8 +25,25 @@ export default function RoomPage() {
 
   const roomId = (params?.roomId as string) || 'watch-room';
 
-  // Check if current user is an authenticated host
-  const isHost = Boolean(session?.user?.email);
+  // Check if current user is an authenticated host (via session or verified token)
+  const [serverIsHost, setServerIsHost] = useState(false);
+  const isHost = Boolean(session?.user?.email) || serverIsHost;
+
+  // Share party link popup modal (auto-triggered on ?share=true or host manual click)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Check URL query parameters for ?share=true
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('share') === 'true') {
+        setIsShareModalOpen(true);
+        // Clean up '?share=true' from the browser address bar without reload
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, '', cleanUrl);
+      }
+    }
+  }, []);
 
   // Room lifecycle stage: 'connecting' | 'live' | 'left'
   const [stage, setStage] = useState<'connecting' | 'live' | 'left'>('connecting');
@@ -210,6 +228,10 @@ export default function RoomPage() {
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Failed to enter this room');
+      }
+
+      if (data.isHost) {
+        setServerIsHost(true);
       }
 
       setStage('live');
@@ -534,6 +556,13 @@ export default function RoomPage() {
             </p>
           </div>
         )}
+
+        {/* Share Room Modal for Host and Automatic Invite Flow */}
+        <ShareRoomModal
+          isOpen={isShareModalOpen}
+          roomId={roomId}
+          onClose={() => setIsShareModalOpen(false)}
+        />
       </div>
     );
   }
@@ -603,6 +632,30 @@ export default function RoomPage() {
                   >
                     HOST
                   </span>
+                )}
+                {/* Host-Only Share Link Button */}
+                {isHost && (
+                  <button
+                    type="button"
+                    onClick={() => setIsShareModalOpen(true)}
+                    className="tactile-btn tactile-btn-secondary"
+                    style={{
+                      padding: '2px 8px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      color: 'var(--accent-blue)',
+                      borderColor: 'rgba(59, 130, 246, 0.4)',
+                      background: 'var(--accent-blue-surface)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      cursor: 'pointer',
+                      borderRadius: 'var(--radius-full)',
+                    }}
+                    title="Share watch party invite link with friends"
+                  >
+                    🔗 Share Link
+                  </button>
                 )}
                 {/* Editable Display Name Badge */}
                 <button
@@ -693,6 +746,28 @@ export default function RoomPage() {
             >
               💬 Chat
             </button>
+
+            {/* Host-Only Share Button in Action Toolbar */}
+            {isHost && (
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(true)}
+                className="tactile-btn tactile-btn-secondary"
+                style={{
+                  padding: '0.4rem 0.75rem',
+                  fontSize: '0.75rem',
+                  color: 'var(--accent-blue)',
+                  borderColor: 'rgba(59, 130, 246, 0.4)',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                title="Share party link"
+              >
+                🔗 Share
+              </button>
+            )}
           </div>
         </header>
 
@@ -848,6 +923,13 @@ export default function RoomPage() {
         onSendMessage={handleSendChat}
         onClose={() => setIsChatOpen(false)}
         chatBottomRef={chatBottomRef}
+      />
+
+      {/* Share Room Modal (Only for Host or Launched with ?share=true) */}
+      <ShareRoomModal
+        isOpen={isShareModalOpen}
+        roomId={roomId}
+        onClose={() => setIsShareModalOpen(false)}
       />
     </div>
   );

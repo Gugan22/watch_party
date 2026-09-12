@@ -57,12 +57,11 @@ export default function LandingPage() {
         throw new Error(data.error || 'Failed to create room');
       }
 
-      setCreatedRoomUrl(data.roomUrl);
-      setCreatedRoomId(data.roomId);
+      // Immediately navigate host directly into the room with share=true to show share popup
+      router.push(`/room/${encodeURIComponent(data.roomId)}?share=true`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error creating room';
       setCreateError(msg);
-    } finally {
       setIsCreating(false);
     }
   };
@@ -235,10 +234,10 @@ export default function LandingPage() {
       <main style={{ flex: 1, padding: '2.5rem 1rem', maxWidth: '680px', margin: '0 auto', width: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <h2 style={{ fontSize: '2.1rem', fontWeight: 800, letterSpacing: '-0.03em', marginBottom: '0.5rem' }}>
-            Private Synchronized Watch Parties
+            Private Watch Party
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '520px', margin: '0 auto' }}>
-            Stream movies and videos in sync with up to 10 friends. Zero sign-in required for joining members.
+            Stream movies and videos in sync with up to 10 friends.
           </p>
         </div>
 
@@ -434,9 +433,6 @@ export default function LandingPage() {
                     placeholder="e.g. Interstellar Watch Party"
                     required
                   />
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                    Give your watch party a name. We'll automatically generate a clean, unique link for your guests.
-                  </p>
                 </div>
 
                 {/* Expiry Window */}
