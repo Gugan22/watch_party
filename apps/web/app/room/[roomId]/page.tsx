@@ -15,6 +15,7 @@ import { ChatDrawer } from '@/components/room/ChatDrawer';
 import { CountdownModal } from '@/components/room/CountdownModal';
 import { PostCallView } from '@/components/room/PostCallView';
 import { ShareRoomModal } from '@/components/room/ShareRoomModal';
+import { WebRTCMeshManager } from '@/lib/webrtc-mesh';
 
 type LayoutMode = 'spotlight' | 'grid' | 'sidebar';
 
@@ -109,6 +110,18 @@ export default function RoomPage() {
   // Active participants list (real connected users only)
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+
+  // WebRTC Mesh Manager for real-time video, audio, chat, and player sync across devices
+  const meshRef = useRef<WebRTCMeshManager | null>(null);
+  const localPeerIdRef = useRef<string>(
+    typeof window !== 'undefined'
+      ? (sessionStorage.getItem('wp_peer_id') || (() => {
+          const id = `peer-${Math.random().toString(36).substring(2, 9)}`;
+          sessionStorage.setItem('wp_peer_id', id);
+          return id;
+        })())
+      : `peer-${Math.random().toString(36).substring(2, 9)}`
+  );
 
   // Screen / OTT Tab Share Controls
   const startScreenShare = async () => {
@@ -250,6 +263,142 @@ export default function RoomPage() {
     handleJoinParty();
   }, [handleJoinParty]);
 
+  // Real-time WebRTC Mesh Connection: Synchronizes video, audio, chat, and movie state across peers
+  useEffect(() => {
+    if (stage !== 'live' || typeof window === 'undefined') return;
+
+    const cleanName = (displayName || session?.user?.name || 'Guest')
+      .replace(/ \(Host\)/gi, '')
+      .replace(/ \(You\)/gi, '')
+      .trim();
+
+    const mesh = new WebRTCMeshManager(
+      roomId,
+      localPeerIdRef.current,
+      cleanName || 'Guest',
+      isHost
+    );
+    meshRef.current = mesh;
+
+    if (localStream) {
+      mesh.setLocalStream(localStream, isCamOn, isMicOn);
+    }
+
+    // Remote peer joined
+    mesh.on('peerJoined', (peer) => {
+      setParticipants((prev) => {
+        if (prev.some((p) => p.id === peer.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: peer.id,
+            name: peer.name,
+            isSpeaking: false,
+            isCamOn: peer.isCamOn,
+            isMicOn: peer.isMicOn,
+            stream: peer.stream,
+          },
+        ];
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(),
+          senderId: 'system',
+          senderName: 'WatchParty',
+          text: `👋 ${peer.name} entered the room!`,
+          timestamp: Date.now(),
+        },
+      ]);
+    });
+
+    // Remote peer left
+    mesh.on('peerLeft', (peerId) => {
+      setParticipants((prev) => {
+        const target = prev.find((p) => p.id === peerId);
+        if (target) {
+          setMessages((m) => [
+            ...m,
+            {
+              id: Math.random().toString(),
+              senderId: 'system',
+              senderName: 'WatchParty',
+              text: `🚪 ${target.name} left the room.`,
+              timestamp: Date.now(),
+            },
+          ]);
+        }
+        return prev.filter((p) => p.id !== peerId);
+      });
+    });
+
+    // Remote peer media stream track received
+    mesh.on('peerStreamUpdated', (peerId, stream) => {
+      setParticipants((prev) =>
+        prev.map((p) => (p.id === peerId ? { ...p, stream } : p))
+      );
+    });
+
+    // Remote peer muted/unmuted cam or mic
+    mesh.on('peerMediaChanged', (peerId, remoteCam, remoteMic) => {
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.id === peerId ? { ...p, isCamOn: remoteCam, isMicOn: remoteMic } : p
+        )
+      );
+    });
+
+    // Remote chat message
+    mesh.on('chatMessage', (msg) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+      setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    });
+
+    // Remote reaction
+    mesh.on('reaction', (emoji, name) => {
+      const newReaction = { id: Math.random().toString(), emoji, name };
+      setActiveReactions((prev) => [...prev, newReaction]);
+      setTimeout(() => {
+        setActiveReactions((prev) => prev.filter((r) => r.id !== newReaction.id));
+      }, 2800);
+    });
+
+    // Remote player sync
+    mesh.on('playerSync', (action, time, url) => {
+      if (url && url !== localVideoUrl) {
+        setLocalVideoUrl(url);
+      }
+      if (moviePlayerRef.current) {
+        if (Math.abs(moviePlayerRef.current.currentTime - time) > 1.5) {
+          moviePlayerRef.current.currentTime = time;
+        }
+        if (action === 'play') {
+          moviePlayerRef.current.play().catch(() => {});
+          setIsPlaying(true);
+        } else if (action === 'pause') {
+          moviePlayerRef.current.pause();
+          setIsPlaying(false);
+        }
+      }
+    });
+
+    return () => {
+      mesh.destroy();
+      meshRef.current = null;
+    };
+  }, [stage, roomId, isHost]);
+
+  // Sync local stream and track enabled state to mesh
+  useEffect(() => {
+    if (meshRef.current) {
+      meshRef.current.setLocalStream(localStream, isCamOn, isMicOn);
+    }
+  }, [localStream, isCamOn, isMicOn]);
+
   // Inline display name rename action
   const handleEditDisplayName = () => {
     const current = displayName || 'Guest';
@@ -338,6 +487,7 @@ export default function RoomPage() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isCamOn });
         setLocalStream(stream);
         setIsMicOn(true);
+        meshRef.current?.setLocalStream(stream, isCamOn, true);
       } catch (err) {
         console.warn('Mic permission error:', err);
       }
@@ -350,15 +500,18 @@ export default function RoomPage() {
         const newTrack = newStream.getAudioTracks()[0];
         localStream.addTrack(newTrack);
         setIsMicOn(true);
+        meshRef.current?.setLocalStream(localStream, isCamOn, true);
       } catch (err) {
         console.warn('Mic track error:', err);
       }
       return;
     }
+    const nextMic = !isMicOn;
     audioTracks.forEach((track) => {
-      track.enabled = !isMicOn;
+      track.enabled = nextMic;
     });
-    setIsMicOn(!isMicOn);
+    setIsMicOn(nextMic);
+    meshRef.current?.broadcastMediaToggle(isCamOn, nextMic);
   };
 
   const toggleCam = async () => {
@@ -367,6 +520,7 @@ export default function RoomPage() {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: isMicOn });
         setLocalStream(stream);
         setIsCamOn(true);
+        meshRef.current?.setLocalStream(stream, true, isMicOn);
       } catch (err) {
         console.warn('Camera permission error:', err);
       }
@@ -379,15 +533,18 @@ export default function RoomPage() {
         const newTrack = newStream.getVideoTracks()[0];
         localStream.addTrack(newTrack);
         setIsCamOn(true);
+        meshRef.current?.setLocalStream(localStream, true, isMicOn);
       } catch (err) {
         console.warn('Camera track error:', err);
       }
       return;
     }
+    const nextCam = !isCamOn;
     videoTracks.forEach((track) => {
-      track.enabled = !isCamOn;
+      track.enabled = nextCam;
     });
-    setIsCamOn(!isCamOn);
+    setIsCamOn(nextCam);
+    meshRef.current?.broadcastMediaToggle(nextCam, isMicOn);
   };
 
   // Fullscreen Theater toggle
@@ -419,12 +576,14 @@ export default function RoomPage() {
 
   // Send Floating Reaction
   const sendReaction = (emoji: string) => {
+    const sender = displayName || 'You';
     const newReaction = {
       id: Math.random().toString(),
       emoji,
-      name: displayName || 'You',
+      name: sender,
     };
     setActiveReactions((prev) => [...prev, newReaction]);
+    meshRef.current?.broadcastReaction(emoji, sender);
     setTimeout(() => {
       setActiveReactions((prev) => prev.filter((r) => r.id !== newReaction.id));
     }, 2800);
@@ -442,6 +601,7 @@ export default function RoomPage() {
       timestamp: Date.now(),
     };
     setMessages((prev) => [...prev, msg]);
+    meshRef.current?.broadcastChatMessage(msg);
     setChatInput('');
     setTimeout(() => {
       chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -463,9 +623,11 @@ export default function RoomPage() {
     if (isPlaying) {
       moviePlayerRef.current.pause();
       setIsPlaying(false);
+      meshRef.current?.broadcastPlayerSync('pause', moviePlayerRef.current.currentTime);
     } else {
       moviePlayerRef.current.play().catch(() => {});
       setIsPlaying(true);
+      meshRef.current?.broadcastPlayerSync('play', moviePlayerRef.current.currentTime);
     }
   };
 
@@ -484,9 +646,14 @@ export default function RoomPage() {
   };
 
   // Self participant model for video tile rendering
+  const rawSelfName = (displayName || session?.user?.name || 'Guest')
+    .replace(/ \(Host\)/gi, '')
+    .replace(/ \(You\)/gi, '')
+    .trim();
+
   const selfParticipant: Participant = {
     id: 'self',
-    name: displayName ? `${displayName.replace(/ \(Host\)$/, '')} (You)` : 'You',
+    name: `${rawSelfName} (You)`,
     isSpeaking: false,
     isCamOn,
     isMicOn,
@@ -798,6 +965,7 @@ export default function RoomPage() {
                     onSetVideoUrl={(url) => {
                       setLocalVideoUrl(url);
                       setIsPlaying(true);
+                      meshRef.current?.broadcastPlayerSync('play', 0, url);
                     }}
                     onStartScreenShare={startScreenShare}
                     onStopScreenShare={stopScreenShare}
@@ -870,6 +1038,7 @@ export default function RoomPage() {
                     <VideoTile
                       key={p.id}
                       participant={p}
+                      stream={p.stream}
                       isHostViewer={isHost}
                       isMutedForHost={hostMutedIds.has(p.id)}
                       onPin={setPinnedId}
@@ -894,6 +1063,7 @@ export default function RoomPage() {
                   onSetVideoUrl={(url) => {
                     setLocalVideoUrl(url);
                     setIsPlaying(true);
+                    meshRef.current?.broadcastPlayerSync('play', 0, url);
                   }}
                   onStartScreenShare={startScreenShare}
                   onStopScreenShare={stopScreenShare}
@@ -946,6 +1116,7 @@ export default function RoomPage() {
                   <VideoTile
                     key={p.id}
                     participant={p}
+                    stream={p.stream}
                     isHostViewer={isHost}
                     isMutedForHost={hostMutedIds.has(p.id)}
                     onKick={handleKickParticipant}
@@ -968,6 +1139,7 @@ export default function RoomPage() {
                   onSetVideoUrl={(url) => {
                     setLocalVideoUrl(url);
                     setIsPlaying(true);
+                    meshRef.current?.broadcastPlayerSync('play', 0, url);
                   }}
                   onStartScreenShare={startScreenShare}
                   onStopScreenShare={stopScreenShare}
@@ -1016,6 +1188,7 @@ export default function RoomPage() {
                     <VideoTile
                       key={p.id}
                       participant={p}
+                      stream={p.stream}
                       isHostViewer={isHost}
                       isMutedForHost={hostMutedIds.has(p.id)}
                       onKick={handleKickParticipant}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 export interface Participant {
   id: string;
@@ -8,6 +8,7 @@ export interface Participant {
   isSpeaking: boolean;
   isCamOn: boolean;
   isMicOn: boolean;
+  stream?: MediaStream | null;
 }
 
 interface VideoTileProps {
@@ -25,7 +26,7 @@ interface VideoTileProps {
 
 export const VideoTile: React.FC<VideoTileProps> = ({
   participant,
-  stream,
+  stream: propStream,
   isSelf = false,
   isHostViewer = false,
   isMutedForHost = false,
@@ -36,13 +37,55 @@ export const VideoTile: React.FC<VideoTileProps> = ({
   style,
 }) => {
   const [showHostMenu, setShowHostMenu] = useState(false);
+  const activeStream = participant.stream || propStream;
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Bind video element whenever stream or camera state updates
+  useEffect(() => {
+    if (videoRef.current && activeStream && participant.isCamOn) {
+      if (videoRef.current.srcObject !== activeStream) {
+        videoRef.current.srcObject = activeStream;
+      }
+      videoRef.current.play().catch(() => {});
+    }
+  }, [activeStream, participant.isCamOn]);
+
+  // Bind audio element for remote participants (unmuted, so you hear them even if cam is off)
+  useEffect(() => {
+    if (!isSelf && audioRef.current && activeStream) {
+      if (audioRef.current.srcObject !== activeStream) {
+        audioRef.current.srcObject = activeStream;
+      }
+      if (isMutedForHost) {
+        audioRef.current.muted = true;
+      } else {
+        audioRef.current.muted = false;
+        audioRef.current.play().catch(() => {});
+      }
+    }
+  }, [activeStream, isSelf, isMutedForHost]);
+
+  // Clean short name to prevent wrapping across lines
+  const rawName = (participant.name || 'User')
+    .replace(/ \(Host\)/gi, '')
+    .replace(/ \(You\)/gi, '')
+    .trim();
+  const displayNameShort = isSelf ? `${rawName} (You)` : rawName;
 
   return (
     <div
       className={`video-tile ${participant.isSpeaking ? 'speaking' : ''}`}
-      style={{ ...style, position: 'relative' }}
+      style={{ ...style, position: 'relative', overflow: 'hidden' }}
     >
-      {isSelf && !stream ? (
+      {/* Background audio playback for remote peers */}
+      {!isSelf && activeStream && (
+        <audio ref={audioRef} autoPlay playsInline />
+      )}
+
+      {/* Main tile content: Active Camera Video, Permission Request prompt, or Avatar */}
+      {isSelf && !activeStream ? (
         <button
           type="button"
           onClick={onRequestMedia}
@@ -64,16 +107,16 @@ export const VideoTile: React.FC<VideoTileProps> = ({
         >
           <div
             style={{
-              width: '36px',
-              height: '36px',
+              width: '38px',
+              height: '38px',
               borderRadius: '50%',
-              background: 'rgba(37, 99, 235, 0.15)',
+              background: 'rgba(59, 130, 246, 0.15)',
               border: '1px solid var(--accent-blue)',
               color: 'var(--accent-blue)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '1rem',
+              fontSize: '1.1rem',
             }}
           >
             📷
@@ -82,57 +125,82 @@ export const VideoTile: React.FC<VideoTileProps> = ({
             Click to Enable Camera
           </span>
         </button>
-      ) : isSelf && participant.isCamOn && stream ? (
+      ) : participant.isCamOn && activeStream ? (
         <video
+          ref={videoRef}
           autoPlay
           playsInline
-          muted
-          ref={(el) => {
-            if (el && stream) {
-              if (el.srcObject !== stream) {
-                el.srcObject = stream;
-              }
-              el.play().catch(() => {});
-            }
-          }}
+          muted={isSelf} // Self MUST be muted to prevent local audio echo loop
           style={{
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            transform: 'scaleX(-1)',
+            transform: isSelf ? 'scaleX(-1)' : 'none',
           }}
         />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            width: '100%',
+            height: '100%',
+            padding: '0.5rem',
+          }}
+        >
           <div
             style={{
               width: '40px',
               height: '40px',
               borderRadius: 'var(--radius-full)',
-              background: 'var(--accent-blue)',
+              background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
               color: '#FFFFFF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 700,
               fontSize: '1.1rem',
+              boxShadow: '0 4px 10px rgba(59, 130, 246, 0.25)',
             }}
           >
-            {participant.name.charAt(0).toUpperCase()}
+            {(rawName || 'U').charAt(0).toUpperCase()}
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>
-            {participant.isCamOn ? 'Camera On' : 'Camera Off'}
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', fontWeight: 500 }}>
+            Camera Off
           </div>
         </div>
       )}
 
-      {/* Overlay badge with mic status */}
-      <div className="tile-overlay-badge">
-        <span title={participant.name}>
-          {isSelf ? `${participant.name.replace(/ \(Host\)/g, '').replace(/ \(You\)/g, '')} (You)` : participant.name}
+      {/* Sleek, Single-Line Bottom Badge (Never wraps, never blocks tile center) */}
+      <div
+        className="tile-overlay-badge"
+        style={{
+          position: 'absolute',
+          bottom: '6px',
+          left: '6px',
+          maxWidth: 'calc(100% - 12px)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          zIndex: 5,
+        }}
+      >
+        <span
+          title={participant.name}
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            display: 'inline-block',
+          }}
+        >
+          {displayNameShort}
         </span>
         {!participant.isMicOn && <span title="Muted by user">🔇</span>}
-        {isMutedForHost && <span title="Muted by host for you" style={{ color: 'var(--warning-amber)' }}>[Muted]</span>}
+        {isMutedForHost && <span title="Muted for you" style={{ color: 'var(--warning-amber)' }}>[Muted]</span>}
       </div>
 
       {/* Pin button */}
