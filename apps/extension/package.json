@@ -1,0 +1,16 @@
+{
+  "name": "@watch-party/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@watch-party/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.270",
+    "typescript": "^5.6.2"
+  }
+}

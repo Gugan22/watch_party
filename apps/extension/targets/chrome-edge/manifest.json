@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "WatchParty Sync Extension",
+  "version": "0.1.0",
+  "description": "Zero-persistence synchronized playback and popup defense for WatchParty private rooms.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

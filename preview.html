@@ -1,0 +1,1795 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WatchParty — End-to-End Design Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* DESIGN SYSTEM: TACTILE DEPTH, MINIMAL, NO NEONS, LIGHT & DARK */
+    :root[data-theme="dark"] {
+      --bg-canvas: #0b0d11;
+      --bg-surface: #13171f;
+      --bg-surface-raised: #1a202c;
+      --bg-surface-elevated: #232b3b;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.15);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-soft: rgba(59, 130, 246, 0.12);
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --danger-soft: rgba(239, 68, 68, 0.12);
+      --success: #10b981;
+      --success-soft: rgba(16, 185, 129, 0.12);
+      --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.25);
+      --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.38);
+      --shadow-lg: 0 16px 40px -8px rgba(0, 0, 0, 0.5);
+      --dock-bg: rgba(19, 23, 31, 0.92);
+      --overlay-bg: rgba(11, 13, 17, 0.85);
+    }
+
+    :root[data-theme="light"] {
+      --bg-canvas: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-surface-raised: #f1f5f9;
+      --bg-surface-elevated: #e2e8f0;
+      --border-subtle: rgba(15, 23, 42, 0.08);
+      --border-strong: rgba(15, 23, 42, 0.15);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-soft: rgba(37, 99, 235, 0.08);
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
+      --danger-soft: rgba(220, 38, 38, 0.08);
+      --success: #059669;
+      --success-soft: rgba(5, 150, 105, 0.08);
+      --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05);
+      --shadow-md: 0 8px 20px -4px rgba(15, 23, 42, 0.08);
+      --shadow-lg: 0 20px 36px -8px rgba(15, 23, 42, 0.12);
+      --dock-bg: rgba(255, 255, 255, 0.92);
+      --overlay-bg: rgba(255, 255, 255, 0.85);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease, box-shadow 0.2s ease;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* TOP GLOBAL NAVIGATOR BAR */
+    .preview-banner {
+      height: 42px;
+      background: var(--bg-surface-raised);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      z-index: 100;
+    }
+
+    .page-tabs {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .page-tab-btn {
+      padding: 4px 12px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .page-tab-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface);
+    }
+
+    .page-tab-btn.active {
+      background: var(--bg-surface);
+      color: var(--accent);
+      border-color: var(--border-subtle);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* HEADER */
+    header {
+      height: 56px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      background-color: var(--bg-surface);
+      z-index: 20;
+    }
+
+    /* FRIENDLY, CREATIVE, SIMPLE LOGO */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: -0.02em;
+      cursor: pointer;
+    }
+
+    .brand-logo-wrap {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: var(--bg-surface-raised);
+      border: 1px solid var(--border-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .room-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      background: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--success);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface-raised);
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      outline: none;
+    }
+
+    .btn-icon:hover {
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-strong);
+    }
+
+    .btn-icon.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn-secondary {
+      height: 36px;
+      padding: 0 13px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface-raised);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-strong);
+    }
+
+    .btn-primary {
+      height: 38px;
+      padding: 0 16px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    /* VIEW CONTAINERS */
+    .view-container {
+      flex: 1;
+      display: none;
+      position: relative;
+    }
+
+    .view-container.active {
+      display: flex;
+    }
+
+    /* ====================================================
+       PAGE 1: LANDING & CREATE ROOM (4 TO 12 HRS EXPIRY)
+       ==================================================== */
+    .landing-page {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 480px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .auth-header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .auth-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .auth-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .owner-badge {
+      display: inline-flex;
+      align-self: center;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .form-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .form-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .form-input, .form-select {
+      height: 42px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface-raised);
+      color: var(--text-primary);
+      font-size: 14px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: var(--accent);
+    }
+
+    .tags-box {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface-raised);
+      min-height: 42px;
+      align-items: center;
+    }
+
+    .email-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--bg-surface-elevated);
+      font-size: 12px;
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .email-tag-remove {
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    .email-tag-remove:hover {
+      color: var(--danger);
+    }
+
+    .tag-input-inline {
+      border: none;
+      background: transparent;
+      outline: none;
+      color: var(--text-primary);
+      font-size: 13px;
+      padding: 4px;
+      flex: 1;
+      min-width: 140px;
+    }
+
+    /* ====================================================
+       PAGE 2: PRE-JOIN GREEN ROOM / LOBBY (AV CHECK)
+       ==================================================== */
+    .lobby-page {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+    }
+
+    .lobby-container {
+      width: 100%;
+      max-width: 840px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 28px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      box-shadow: var(--shadow-lg);
+      padding: 28px;
+    }
+
+    @media (max-width: 768px) {
+      .lobby-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .lobby-preview-box {
+      background: #000000;
+      border-radius: 12px;
+      position: relative;
+      aspect-ratio: 16/9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .lobby-av-bar {
+      position: absolute;
+      bottom: 12px;
+      display: flex;
+      gap: 10px;
+      background: var(--dock-bg);
+      backdrop-filter: blur(12px);
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+    }
+
+    .lobby-details {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 20px;
+    }
+
+    .lobby-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    /* ====================================================
+       PAGE 3: LIVE ROOM (DYNAMIC LAYOUTS, PINNING & FULLSCREEN)
+       ==================================================== */
+    .room-page {
+      flex: 1;
+      display: flex;
+      height: calc(100vh - 98px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .room-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 18px 80px 18px;
+      gap: 12px;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    /* STAGE TOOLBAR */
+    .stage-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 38px;
+      flex-shrink: 0;
+    }
+
+    .layout-switch-group {
+      display: flex;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .layout-btn {
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .layout-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-raised);
+    }
+
+    .layout-btn.active {
+      background: var(--bg-surface-raised);
+      color: var(--accent);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* LAYOUT CONTAINERS */
+    .layout-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    /* 2. SIDEBAR MODE */
+    .layout-container.mode-sidebar {
+      flex-direction: row;
+    }
+
+    .layout-container.mode-sidebar .main-focal-tile {
+      flex: 1;
+      min-height: 0;
+    }
+
+    .layout-container.mode-sidebar .participants-grid-area {
+      width: 220px;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      max-height: none;
+    }
+
+    .layout-container.mode-sidebar .participants-grid-area .tile {
+      height: 120px;
+      flex-shrink: 0;
+    }
+
+    /* 3. GRID GALLERY MODE (TEAMS / GMEET 2x2/3x3 ALIGNED) */
+    .layout-container.mode-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-auto-rows: 1fr;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .layout-container.mode-grid .main-focal-tile {
+      min-height: 220px;
+    }
+
+    .layout-container.mode-grid .participants-grid-area {
+      display: contents;
+    }
+
+    .layout-container.mode-grid .tile {
+      height: auto;
+      min-height: 220px;
+    }
+
+    /* MAIN FOCAL TILE */
+    .main-focal-tile {
+      flex: 1;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      box-shadow: var(--shadow-md);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      min-height: 320px;
+    }
+
+    /* FULLSCREEN THEATER MODE OVERLAY STYLING */
+    .main-focal-tile.is-fullscreen {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 9999 !important;
+      border-radius: 0 !important;
+      border: none !important;
+    }
+
+    .fullscreen-pip-reactions {
+      display: none;
+      position: absolute;
+      bottom: 74px;
+      right: 24px;
+      background: rgba(19, 23, 31, 0.85);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 10px 14px;
+      z-index: 50;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+      flex-direction: column;
+      gap: 8px;
+      max-width: 280px;
+    }
+
+    .main-focal-tile.is-fullscreen .fullscreen-pip-reactions {
+      display: flex;
+    }
+
+    .focal-viewport {
+      flex: 1;
+      background: #000000;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .tile-pin-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: var(--dock-bg);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      width: 28px;
+      height: 28px;
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      z-index: 5;
+      opacity: 0.7;
+    }
+
+    .tile-pin-btn:hover {
+      opacity: 1;
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .tile-pin-btn.pinned {
+      opacity: 1;
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+
+    .ext-pill {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: var(--dock-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      padding: 5px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: var(--shadow-sm);
+      z-index: 5;
+    }
+
+    .ext-pill .pulse {
+      width: 7px;
+      height: 7px;
+      background: var(--success);
+      border-radius: 50%;
+    }
+
+    .focal-player-controls {
+      height: 50px;
+      padding: 0 16px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .play-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: none;
+      background: var(--bg-surface-raised);
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .timeline-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .timeline {
+      flex: 1;
+      height: 4px;
+      background: var(--bg-surface-elevated);
+      border-radius: 4px;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .timeline-progress {
+      width: 42%;
+      height: 100%;
+      background: var(--accent);
+      border-radius: 4px;
+      position: relative;
+    }
+
+    .timeline-thumb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      position: absolute;
+      right: -6px;
+      top: -4px;
+    }
+
+    .time-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .drift-chip {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--success-soft);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    /* PARTICIPANTS AREA */
+    .participants-grid-area {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      height: 100px;
+      flex-shrink: 0;
+    }
+
+    .tile {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .tile:hover {
+      border-color: var(--border-strong);
+    }
+
+    .tile.active-speaker {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), var(--shadow-sm);
+    }
+
+    .tile-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--bg-surface-elevated);
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .tile-meta {
+      position: absolute;
+      bottom: 6px;
+      left: 8px;
+      right: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .tile-name {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--dock-bg);
+      backdrop-filter: blur(8px);
+      padding: 2px 6px;
+      border-radius: 4px;
+      max-width: 80px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tile-mute {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      background: var(--dock-bg);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* FLOATING BOTTOM DOCK */
+    .control-dock {
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--dock-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-strong);
+      border-radius: 9999px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: var(--shadow-lg);
+      z-index: 40;
+    }
+
+    .dock-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface-raised);
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .dock-btn:hover {
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-strong);
+    }
+
+    .dock-btn.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .dock-btn.danger {
+      background: var(--danger-soft);
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .dock-btn.danger:hover {
+      background: var(--danger);
+      color: #ffffff;
+    }
+
+    .dock-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border-subtle);
+      margin: 0 2px;
+    }
+
+    /* COLLAPSIBLE SIDEBAR CHAT */
+    .sidebar {
+      width: 320px;
+      border-left: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
+    }
+
+    .sidebar.collapsed {
+      width: 0;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      border-left: none;
+    }
+
+    .sidebar-header {
+      height: 50px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .sidebar-close-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sidebar-close-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-raised);
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .msg {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: 85%;
+    }
+
+    .msg.incoming {
+      align-self: flex-start;
+    }
+
+    .msg.outgoing {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+
+    .msg-sender {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-left: 4px;
+    }
+
+    .msg-bubble {
+      padding: 9px 13px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .msg.incoming .msg-bubble {
+      background: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      border-bottom-left-radius: 3px;
+    }
+
+    .msg.outgoing .msg-bubble {
+      background: var(--accent);
+      color: #ffffff;
+      border-bottom-right-radius: 3px;
+    }
+
+    .msg-time {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      margin-left: 4px;
+    }
+
+    .chat-input-bar {
+      padding: 12px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      gap: 8px;
+    }
+
+    .chat-input {
+      flex: 1;
+      height: 38px;
+      padding: 0 12px;
+      background: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .chat-input:focus {
+      border-color: var(--accent);
+    }
+
+    .chat-send-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: #ffffff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ====================================================
+       PAGE 4: CALL ENDED / LEAVE SCREEN
+       ==================================================== */
+    .ended-page {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .ended-card {
+      width: 100%;
+      max-width: 440px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      padding: 36px 32px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .ended-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--bg-surface-raised);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    /* MODALS */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-card {
+      width: 460px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .modal-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .invite-box {
+      display: flex;
+      gap: 8px;
+      background: var(--bg-surface-raised);
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--text-secondary);
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .countdown-circle {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      border: 2px solid var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 38px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 10px auto;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PREVIEW NAVIGATOR BAR -->
+  <div class="preview-banner">
+    <div style="font-weight: 700; display: flex; align-items: center; gap: 8px;">
+      <span>Page Flow:</span>
+    </div>
+    <div class="page-tabs">
+      <button class="page-tab-btn" data-target="page-landing">1. Create Room (4-12h Expiry)</button>
+      <button class="page-tab-btn" data-target="page-lobby">2. Pre-Join Lobby</button>
+      <button class="page-tab-btn active" data-target="page-room">3. Live Watch Party (Fullscreen & Pinning)</button>
+      <button class="page-tab-btn" data-target="page-ended">4. Room Left Screen</button>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 12px; color: var(--text-muted)">Theme:</span>
+      <button class="btn-icon" id="themeToggle" title="Toggle Light/Dark Theme" style="width: 30px; height: 30px;">
+        <svg id="moonIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="sunIcon" style="display:none;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <header>
+    <!-- FRIENDLY, CREATIVE, SIMPLE LOGO -->
+    <div class="brand" title="WatchParty">
+      <div class="brand-logo-wrap">
+        <!-- Two friendly smiling viewing buddies forming a play visor -->
+        <svg width="20" height="20" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Buddy 1 (Left) -->
+          <circle cx="11" cy="12" r="4.5" />
+          <!-- Buddy 2 (Right) -->
+          <circle cx="21" cy="12" r="4.5" />
+          <!-- Friendly shared cinema couch / smiling connection visor -->
+          <path d="M6 24 C8 19, 24 19, 26 24" />
+          <!-- Play wink / smile spark -->
+          <polygon points="15 11 18 13 15 15" fill="currentColor" stroke="none" />
+        </svg>
+      </div>
+      <span>WatchParty</span>
+    </div>
+
+    <div class="header-center">
+      <div class="room-badge" id="headerRoomBadge">
+        <div class="status-dot"></div>
+        <span>Room #interstellar-night</span>
+        <span style="color: var(--text-muted)">•</span>
+        <span>4 / 10 connected</span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <!-- Fullscreen Theater Mode Trigger -->
+      <button class="btn-icon" id="fullscreenToggleBtn" title="Toggle Fullscreen Theater Mode (or press F)">
+        <svg id="fsEnterIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fsExitIcon" style="display:none;" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+      </button>
+
+      <!-- Chat Toggle (Hide / Show Messages) -->
+      <button class="btn-icon" id="chatToggleHeaderBtn" title="Toggle Chat Panel (Hide/Show)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </button>
+
+      <button class="btn-secondary" id="inviteHeaderBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        <span>Invite</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ====================================================
+       PAGE 1: LANDING & ROOM CREATION (4 TO 12 HRS EXPIRY)
+       ==================================================== -->
+  <div class="view-container" id="page-landing">
+    <div class="landing-page">
+      <div class="auth-card">
+        <div class="auth-header">
+          <span class="owner-badge">Owner Mode (Gugan)</span>
+          <h1 class="auth-title">Create a Watch Party</h1>
+          <p class="auth-desc">Invite up to 9 friends. Only verified Google accounts can join.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Room Identifier / Title</label>
+          <input type="text" class="form-input" value="interstellar-night" placeholder="e.g. dune-part-two" />
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <label class="form-label">Allowed Friend Emails (Max 9)</label>
+            <span class="form-hint">Press Enter to add</span>
+          </div>
+          <div class="tags-box">
+            <span class="email-tag">alex@gmail.com <span class="email-tag-remove">&times;</span></span>
+            <span class="email-tag">sarah@gmail.com <span class="email-tag-remove">&times;</span></span>
+            <span class="email-tag">rachel@gmail.com <span class="email-tag-remove">&times;</span></span>
+            <input type="email" class="tag-input-inline" placeholder="friend@gmail.com" />
+          </div>
+        </div>
+
+        <!-- 4 TO 12 HOURS LINK EXPIRY -->
+        <div class="form-group">
+          <label class="form-label">Invite Link Expiry</label>
+          <select class="form-select">
+            <option selected>4 Hours</option>
+            <option>6 Hours</option>
+            <option>8 Hours</option>
+            <option>12 Hours (Max)</option>
+          </select>
+          <span class="form-hint">Link automatically invalidates cryptographically after expiry.</span>
+        </div>
+
+        <button class="btn-primary" style="height: 44px; justify-content: center;" onclick="switchToPage('page-lobby')">
+          <span>Create Room & Enter Lobby</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       PAGE 2: PRE-JOIN GREEN ROOM / LOBBY (AV CHECK)
+       ==================================================== -->
+  <div class="view-container" id="page-lobby">
+    <div class="lobby-page">
+      <div class="lobby-container">
+        <div class="lobby-preview-box">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <div class="tile-avatar" style="width: 64px; height: 64px; font-size: 24px;">G</div>
+            <span style="font-size: 13px; font-weight: 600; color: #ffffff;">Camera Preview Ready</span>
+          </div>
+          <div class="lobby-av-bar">
+            <button class="dock-btn active" style="width: 36px; height: 36px; font-size: 14px;">🎙️</button>
+            <button class="dock-btn" style="width: 36px; height: 36px; font-size: 14px;">📷</button>
+          </div>
+        </div>
+
+        <div class="lobby-details">
+          <div>
+            <h2 class="lobby-title">Ready to join the party?</h2>
+            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary);">
+              <span class="status-dot"></span>
+              <span>Room: <strong>#interstellar-night</strong></span>
+            </div>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-top: 10px;">
+              3 friends are in the room. Microphone is active and calibrated.
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Your Display Name</label>
+            <input type="text" class="form-input" value="Gugan" />
+          </div>
+
+          <button class="btn-primary" style="height: 44px; justify-content: center;" onclick="switchToPage('page-room')">
+            <span>Join Party Now</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       PAGE 3: LIVE ROOM (FULLSCREEN, PINNING, DYNAMIC TEAMS/MEET LAYOUTS)
+       ==================================================== -->
+  <div class="view-container active" id="page-room">
+    <div class="room-page">
+      <section class="room-stage">
+
+        <!-- DYNAMIC LAYOUT SELECTOR & MEDIA SOURCE -->
+        <div class="stage-toolbar">
+          <div class="layout-switch-group">
+            <button class="layout-btn active" id="layoutSpotlightBtn" onclick="setLayout('spotlight')" title="Spotlight: Main stage with filmstrip below">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10"/></svg>
+              <span>Spotlight</span>
+            </button>
+            <button class="layout-btn" id="layoutGridBtn" onclick="setLayout('grid')" title="Grid Gallery: Equal tiles like Teams/Meet">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              <span>Grid Gallery</span>
+            </button>
+            <button class="layout-btn" id="layoutSidebarBtn" onclick="setLayout('sidebar')" title="Sidebar: Stage center with vertical filmstrip">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="12" height="18" rx="1"/><rect x="17" y="3" width="4" height="5" rx="1"/><rect x="17" y="10" width="4" height="5" rx="1"/><rect x="17" y="17" width="4" height="5" rx="1"/></svg>
+              <span>Sidebar</span>
+            </button>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+              <span style="color: var(--text-muted)">Source:</span>
+              <span id="activeSourceLabel" style="color: var(--text-primary)">Extension / OTT / movies2watch</span>
+            </div>
+            <button class="btn-secondary" style="height: 32px; font-size: 12px;" onclick="openCountdownModal()" title="Mobile Synced Countdown Fallback">
+              <span>⏱️ Countdown</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- DYNAMIC LAYOUT CONTAINER -->
+        <div class="layout-container" id="dynamicLayoutContainer">
+
+          <!-- MAIN FOCAL TILE (MOVIE PLAYER OR PINNED PARTICIPANT) -->
+          <div class="main-focal-tile" id="mainFocalTile">
+            <!-- Pin Button on Focal Tile -->
+            <button class="tile-pin-btn pinned" id="focalPinBtn" title="Pin / Unpin Tile" onclick="resetMoviePin()">
+              📌
+            </button>
+
+            <!-- Fullscreen Theater Overlay: Reaction PiP for Friends -->
+            <div class="fullscreen-pip-reactions" id="fsPipReactions">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 11px; font-weight: 700; color: #ffffff;">Friends in Party</span>
+                <span style="font-size: 10px; color: var(--accent); cursor: pointer;" onclick="toggleFsReactions()">Hide [H]</span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <div class="tile-avatar" style="width: 28px; height: 28px; font-size: 11px;">A</div>
+                <div class="tile-avatar" style="width: 28px; height: 28px; font-size: 11px;">S</div>
+                <div class="tile-avatar" style="width: 28px; height: 28px; font-size: 11px;">R</div>
+                <div style="font-size: 11px; color: #94a3b8; margin-left: 4px;">Sarah: "That twist!"</div>
+              </div>
+            </div>
+
+            <div class="focal-viewport" id="focalViewport">
+              <!-- Sync Extension Floating Pill Demo -->
+              <div class="ext-pill">
+                <div class="pulse"></div>
+                <span id="focalTileTitle">Synced Player (movies2watch / OTT)</span>
+                <span style="opacity: 0.4">|</span>
+                <span class="drift-chip">Drift: 0.03s</span>
+              </div>
+
+              <!-- Main Viewport Mock Visual -->
+              <div id="focalSceneVisual" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted)">
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span style="font-size: 13px; font-weight: 500;">Interstellar (2014) • 1080p Synced</span>
+                <span style="font-size: 11px; color: var(--text-muted)">Press <strong>F</strong> or click the expand icon for Fullscreen Theater Mode</span>
+              </div>
+            </div>
+
+            <div class="focal-player-controls" id="focalPlayerControls">
+              <button class="play-btn" id="playToggle">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </button>
+              <div class="timeline-container">
+                <span class="time-label">45:12</span>
+                <div class="timeline">
+                  <div class="timeline-progress">
+                    <div class="timeline-thumb"></div>
+                  </div>
+                </div>
+                <span class="time-label">2:49:00</span>
+              </div>
+              <div class="drift-chip">In Sync</div>
+              <button class="btn-icon" style="width: 32px; height: 32px; border: none; background: transparent;" onclick="toggleFullscreenTheater()" title="Fullscreen Theater">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- PARTICIPANTS AREA (PERFECTLY ALIGNED) -->
+          <div class="participants-grid-area" id="participantsArea">
+            
+            <div class="tile active-speaker" onclick="pinParticipant('Gugan (You)', 'G')">
+              <button class="tile-pin-btn" title="Pin Gugan to main stage">📌</button>
+              <div class="tile-avatar">G</div>
+              <div class="tile-meta">
+                <span class="tile-name">Gugan (You)</span>
+                <span class="tile-mute">🎙️</span>
+              </div>
+            </div>
+
+            <div class="tile" onclick="pinParticipant('Alex J.', 'A')">
+              <button class="tile-pin-btn" title="Pin Alex to main stage">📌</button>
+              <div class="tile-avatar">A</div>
+              <div class="tile-meta">
+                <span class="tile-name">Alex J.</span>
+                <span class="tile-mute">🔇</span>
+              </div>
+            </div>
+
+            <div class="tile" onclick="pinParticipant('Sarah L.', 'S')">
+              <button class="tile-pin-btn" title="Pin Sarah to main stage">📌</button>
+              <div class="tile-avatar">S</div>
+              <div class="tile-meta">
+                <span class="tile-name">Sarah L.</span>
+                <span class="tile-mute">🎙️</span>
+              </div>
+            </div>
+
+            <div class="tile" onclick="pinParticipant('Rachel P.', 'R')">
+              <button class="tile-pin-btn" title="Pin Rachel to main stage">📌</button>
+              <div class="tile-avatar">R</div>
+              <div class="tile-meta">
+                <span class="tile-name">Rachel P.</span>
+                <span class="tile-mute">🔇</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- FLOATING BOTTOM CONTROL DOCK -->
+      <div class="control-dock">
+        <button class="dock-btn active" title="Microphone" id="micBtn">🎙️</button>
+        <button class="dock-btn" title="Camera" id="camBtn">📷</button>
+        <button class="dock-btn" title="Screen Share">🖥️</button>
+        <button class="dock-btn" title="Local Video File Mode" onclick="promptLocalFile()">📁</button>
+        <button class="dock-btn" title="Toggle Fullscreen Theater" onclick="toggleFullscreenTheater()">⛶</button>
+        
+        <!-- Toggle Chat Dock Button -->
+        <button class="dock-btn active" id="chatDockBtn" title="Toggle Chat Panel">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+
+        <div class="dock-divider"></div>
+        <button class="dock-btn danger" title="Leave Room" onclick="switchToPage('page-ended')">✕</button>
+      </div>
+
+      <!-- COLLAPSIBLE SIDEBAR CHAT -->
+      <aside class="sidebar" id="chatSidebar">
+        <div class="sidebar-header">
+          <span>Room Chat</span>
+          <button class="sidebar-close-btn" id="hideChatBtn" title="Hide Messages">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <div class="chat-messages" id="chatList">
+          <div class="msg incoming">
+            <span class="msg-sender">Alex J.</span>
+            <div class="msg-bubble">Hey Gugan! The stream is completely in sync on movies2watch.</div>
+            <span class="msg-time">7:54 PM</span>
+          </div>
+          <div class="msg incoming">
+            <span class="msg-sender">Sarah L.</span>
+            <div class="msg-bubble">I love being able to hide the chat when the movie gets intense!</div>
+            <span class="msg-time">7:55 PM</span>
+          </div>
+          <div class="msg outgoing">
+            <div class="msg-bubble">Hit 'F' or click the expand icon for Fullscreen Theater Mode!</div>
+            <span class="msg-time">7:56 PM</span>
+          </div>
+        </div>
+
+        <form class="chat-input-bar" id="chatForm">
+          <input type="text" class="chat-input" id="chatInput" placeholder="Send message to room..." autocomplete="off" />
+          <button type="submit" class="chat-send-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </form>
+      </aside>
+
+    </div>
+  </div>
+
+  <!-- ====================================================
+       PAGE 4: CALL ENDED / LEAVE SCREEN
+       ==================================================== -->
+  <div class="view-container" id="page-ended">
+    <div class="ended-page">
+      <div class="ended-card">
+        <div class="ended-icon">👋</div>
+        <div>
+          <h2 style="font-size: 20px; font-weight: 700;">You left the watch party</h2>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 6px;">
+            The room session and WebRTC connections were closed cleanly.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 10px; width: 100%;">
+          <button class="btn-secondary" style="flex: 1; justify-content: center;" onclick="switchToPage('page-landing')">
+            Back to Home
+          </button>
+          <button class="btn-primary" style="flex: 1; justify-content: center;" onclick="switchToPage('page-room')">
+            Rejoin Party
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVITE MODAL -->
+  <div class="modal-overlay" id="inviteModal">
+    <div class="modal-card">
+      <h2 class="modal-title">Invite to Party</h2>
+      <p class="modal-subtitle">Share this signed JWT invite link. Only authorized Google accounts can join (max 10 people).</p>
+      
+      <div class="invite-box">
+        <span id="inviteLinkText" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">https://watchparty.vercel.app/room/interstellar-night?invite=eyJhbGci...</span>
+      </div>
+
+      <div style="display:flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn-secondary" id="closeModalBtn">Cancel</button>
+        <button class="btn-primary" id="copyLinkBtn">Copy Link</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE SYNC COUNTDOWN MODAL -->
+  <div class="modal-overlay" id="countdownModal">
+    <div class="modal-card" style="text-align: center;">
+      <h2 class="modal-title">Synchronized Countdown</h2>
+      <p class="modal-subtitle">For participants on mobile or browsers without extensions: hit play when the counter hits zero!</p>
+      
+      <div class="countdown-circle" id="countdownNumber">3</div>
+
+      <div style="display:flex; justify-content: center; gap: 8px; margin-top: 10px;">
+        <button class="btn-secondary" onclick="closeCountdownModal()">Dismiss</button>
+        <button class="btn-primary" onclick="startCountdown()">Start Countdown</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // PAGE NAVIGATION TABS
+    const pageTabs = document.querySelectorAll('.page-tab-btn');
+    const viewContainers = document.querySelectorAll('.view-container');
+
+    function switchToPage(targetId) {
+      viewContainers.forEach(c => c.classList.remove('active'));
+      pageTabs.forEach(t => t.classList.remove('active'));
+
+      const target = document.getElementById(targetId);
+      if (target) target.classList.add('active');
+
+      const matchingTab = Array.from(pageTabs).find(t => t.getAttribute('data-target') === targetId);
+      if (matchingTab) matchingTab.classList.add('active');
+    }
+
+    pageTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        switchToPage(tab.getAttribute('data-target'));
+      });
+    });
+
+    // THEME TOGGLE
+    const html = document.documentElement;
+    const themeBtn = document.getElementById('themeToggle');
+    const moonIcon = document.getElementById('moonIcon');
+    const sunIcon = document.getElementById('sunIcon');
+
+    themeBtn.addEventListener('click', () => {
+      const current = html.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      if (next === 'light') {
+        moonIcon.style.display = 'none';
+        sunIcon.style.display = 'block';
+      } else {
+        moonIcon.style.display = 'block';
+        sunIcon.style.display = 'none';
+      }
+    });
+
+    // CHAT TOGGLE (SHOW / HIDE MESSAGES)
+    const chatSidebar = document.getElementById('chatSidebar');
+    const hideChatBtn = document.getElementById('hideChatBtn');
+    const chatDockBtn = document.getElementById('chatDockBtn');
+    const chatToggleHeaderBtn = document.getElementById('chatToggleHeaderBtn');
+
+    function toggleChat() {
+      const isCollapsed = chatSidebar.classList.toggle('collapsed');
+      if (isCollapsed) {
+        chatDockBtn.classList.remove('active');
+        chatToggleHeaderBtn.classList.remove('active');
+      } else {
+        chatDockBtn.classList.add('active');
+        chatToggleHeaderBtn.classList.add('active');
+      }
+    }
+
+    hideChatBtn.addEventListener('click', toggleChat);
+    chatDockBtn.addEventListener('click', toggleChat);
+    chatToggleHeaderBtn.addEventListener('click', toggleChat);
+
+    // FULLSCREEN THEATER MODE (CLICK BUTTON OR PRESS 'F')
+    const mainFocalTile = document.getElementById('mainFocalTile');
+    const fullscreenToggleBtn = document.getElementById('fullscreenToggleBtn');
+    const fsEnterIcon = document.getElementById('fsEnterIcon');
+    const fsExitIcon = document.getElementById('fsExitIcon');
+
+    function toggleFullscreenTheater() {
+      const isFs = mainFocalTile.classList.toggle('is-fullscreen');
+      if (isFs) {
+        fsEnterIcon.style.display = 'none';
+        fsExitIcon.style.display = 'block';
+      } else {
+        fsEnterIcon.style.display = 'block';
+        fsExitIcon.style.display = 'none';
+      }
+    }
+
+    fullscreenToggleBtn.addEventListener('click', toggleFullscreenTheater);
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'f' || e.key === 'F') {
+        // Only if not focused in an input
+        if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+        toggleFullscreenTheater();
+      } else if (e.key === 'Escape' && mainFocalTile.classList.contains('is-fullscreen')) {
+        toggleFullscreenTheater();
+      }
+    });
+
+    function toggleFsReactions() {
+      const box = document.getElementById('fsPipReactions');
+      box.style.display = box.style.display === 'none' ? 'flex' : 'none';
+    }
+
+    // DYNAMIC LAYOUT SWITCHER (TEAMS / GMEET STYLE)
+    const layoutContainer = document.getElementById('dynamicLayoutContainer');
+    const layoutSpotlightBtn = document.getElementById('layoutSpotlightBtn');
+    const layoutGridBtn = document.getElementById('layoutGridBtn');
+    const layoutSidebarBtn = document.getElementById('layoutSidebarBtn');
+
+    function setLayout(mode) {
+      layoutSpotlightBtn.classList.remove('active');
+      layoutGridBtn.classList.remove('active');
+      layoutSidebarBtn.classList.remove('active');
+
+      layoutContainer.classList.remove('mode-sidebar', 'mode-grid');
+
+      if (mode === 'spotlight') {
+        layoutSpotlightBtn.classList.add('active');
+      } else if (mode === 'grid') {
+        layoutGridBtn.classList.add('active');
+        layoutContainer.classList.add('mode-grid');
+      } else if (mode === 'sidebar') {
+        layoutSidebarBtn.classList.add('active');
+        layoutContainer.classList.add('mode-sidebar');
+      }
+    }
+
+    // DYNAMIC PINNING
+    const focalTileTitle = document.getElementById('focalTileTitle');
+    const focalSceneVisual = document.getElementById('focalSceneVisual');
+    const focalPlayerControls = document.getElementById('focalPlayerControls');
+    const focalPinBtn = document.getElementById('focalPinBtn');
+
+    function pinParticipant(name, avatar) {
+      focalTileTitle.textContent = `Pinned: ${name}`;
+      focalSceneVisual.innerHTML = `
+        <div class="tile-avatar" style="width: 72px; height: 72px; font-size: 28px; background: var(--bg-surface-elevated);">${avatar}</div>
+        <span style="font-size: 14px; font-weight: 600; color: #ffffff;">${name} is pinned</span>
+      `;
+      focalPlayerControls.style.display = 'none';
+      focalPinBtn.classList.remove('pinned');
+    }
+
+    function resetMoviePin() {
+      focalTileTitle.textContent = 'Synced Player (movies2watch / OTT)';
+      focalSceneVisual.innerHTML = `
+        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span style="font-size: 13px; font-weight: 500;">Interstellar (2014) • 1080p Synced</span>
+        <span style="font-size: 11px; color: var(--text-muted)">Press <strong>F</strong> or click the expand icon for Fullscreen Theater Mode</span>
+      `;
+      focalPlayerControls.style.display = 'flex';
+      focalPinBtn.classList.add('pinned');
+    }
+
+    // CHAT MESSAGE SUBMISSION
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const chatList = document.getElementById('chatList');
+
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'msg outgoing';
+      msgDiv.innerHTML = `
+        <div class="msg-bubble">${text}</div>
+        <span class="msg-time">Just now</span>
+      `;
+      chatList.appendChild(msgDiv);
+      chatInput.value = '';
+      chatList.scrollTop = chatList.scrollHeight;
+    });
+
+    // INVITE MODAL
+    const inviteBtn = document.getElementById('inviteHeaderBtn');
+    const inviteModal = document.getElementById('inviteModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
+
+    inviteBtn.addEventListener('click', () => inviteModal.classList.add('open'));
+    closeModalBtn.addEventListener('click', () => inviteModal.classList.remove('open'));
+    copyLinkBtn.addEventListener('click', () => {
+      copyLinkBtn.textContent = 'Copied!';
+      setTimeout(() => {
+        copyLinkBtn.textContent = 'Copy Link';
+        inviteModal.classList.remove('open');
+      }, 1000);
+    });
+
+    // COUNTDOWN MODAL
+    const countdownModal = document.getElementById('countdownModal');
+    const countdownNumber = document.getElementById('countdownNumber');
+
+    function openCountdownModal() {
+      countdownModal.classList.add('open');
+      countdownNumber.textContent = '3';
+    }
+
+    function closeCountdownModal() {
+      countdownModal.classList.remove('open');
+    }
+
+    function startCountdown() {
+      let count = 3;
+      countdownNumber.textContent = count;
+      const interval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          countdownNumber.textContent = count;
+        } else if (count === 0) {
+          countdownNumber.textContent = 'PLAY!';
+        } else {
+          clearInterval(interval);
+          closeCountdownModal();
+        }
+      }, 1000);
+    }
+
+    // LOCAL FILE PROMPT
+    function promptLocalFile() {
+      const sourceLabel = document.getElementById('activeSourceLabel');
+      sourceLabel.textContent = 'Local File Mode (sample_movie.mkv)';
+      alert('Local File Mode Activated: timing is synchronized across participants via sync-protocol.ts with zero cloud file transfer.');
+    }
+  </script>
+</body>
+</html>
