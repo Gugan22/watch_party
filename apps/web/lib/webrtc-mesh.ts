@@ -1,4 +1,5 @@
 import type { ChatMessage } from '@watch-party/shared';
+import mqtt, { type MqttClient } from 'mqtt';
 
 export interface RemotePeerInfo {
   id: string;
@@ -44,9 +45,8 @@ export class WebRTCMeshManager {
   private pendingCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
   private kickedPeerIds: Set<string> = new Set();
 
-  private eventSource: EventSource | null = null;
-  private sseUrl: string;
-  private postUrl: string;
+  private mqttClient: MqttClient | null = null;
+  private topic: string;
   private destroyed = false;
   private heartbeatInterval: any = null;
   private reaperInterval: any = null;
@@ -61,12 +61,8 @@ export class WebRTCMeshManager {
     this.displayName = displayName;
     this.isHost = isHost;
 
-    const deployPrefix = (process.env.NEXT_PUBLIC_DEPLOY_ID || 'v1').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 20);
-    const cleanRoom = this.roomId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const topic = `${deployPrefix}-${cleanRoom}`;
-    // ?since=now prevents ntfy from replaying old announcements from departed/historical users
-    this.sseUrl = `https://ntfy.sh/${topic}/sse?since=now`;
-    this.postUrl = `https://ntfy.sh/${topic}`;
+    const cleanRoom = this.roomId.replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+    this.topic = `watchparty/v2/${cleanRoom}`;
 
     this.initSignaling();
     this.initReaper();
@@ -74,8 +70,7 @@ export class WebRTCMeshManager {
     if (typeof window !== 'undefined') {
       this.unloadHandler = () => {
         try {
-          const payload = JSON.stringify({ type: 'leave', peerId: this.localPeerId });
-          navigator.sendBeacon(this.postUrl, payload);
+          this.broadcast({ type: 'leave', peerId: this.localPeerId });
         } catch {}
       };
       window.addEventListener('beforeunload', this.unloadHandler);
@@ -132,56 +127,94 @@ export class WebRTCMeshManager {
     this.broadcastMediaToggle(isCamOn, isMicOn);
   }
 
-  // Initialize SSE signaling receiver
+  // Initialize high-speed WebSockets MQTT signaling
   private initSignaling() {
     if (typeof window === 'undefined') return;
 
-    try {
-      this.eventSource = new EventSource(this.sseUrl);
+    const brokers = [
+      'wss://broker.hivemq.com:8884/mqtt',
+      'wss://test.mosquitto.org:8081',
+    ];
+    let brokerIdx = 0;
 
-      this.eventSource.onopen = () => {
-        // Announce presence immediately
+    const connectToBroker = () => {
+      if (this.destroyed) return;
+      const url = brokers[brokerIdx % brokers.length];
+      console.log('[WebRTC-Signal] Connecting to signaling broker:', url);
+
+      try {
+        const client = mqtt.connect(url, {
+          clientId: `wp_${this.localPeerId}_${Math.random().toString(16).substring(2, 8)}`,
+          keepalive: 30,
+          clean: true,
+          reconnectPeriod: 3000,
+          connectTimeout: 6000,
+        });
+
+        this.mqttClient = client;
+
+        client.on('connect', () => {
+          if (this.destroyed) {
+            client.end(true);
+            return;
+          }
+          console.log('[WebRTC-Signal] Connected to relay. Subscribing to:', this.topic);
+          client.subscribe(this.topic, { qos: 0 }, (err) => {
+            if (err) {
+              console.warn('[WebRTC-Signal] Subscribe failed:', err);
+              return;
+            }
+            console.log('[WebRTC-Signal] Subscribed to room channel! Announcing presence...');
+            // Broadcast presence immediately
+            this.broadcast({
+              type: 'announce',
+              peerId: this.localPeerId,
+              name: this.displayName,
+              isCamOn: this.isCamOn,
+              isMicOn: this.isMicOn,
+            });
+          });
+        });
+
+        client.on('message', (_topic, messageBuffer) => {
+          if (this.destroyed) return;
+          try {
+            const signal = JSON.parse(messageBuffer.toString());
+            this.handleSignal(signal);
+          } catch {
+            // Ignore non-JSON or corrupt packet
+          }
+        });
+
+        client.on('error', (err) => {
+          console.warn('[WebRTC-Signal] Broker error, switching to fallback:', err);
+          client.end(true);
+          if (!this.destroyed) {
+            brokerIdx++;
+            setTimeout(connectToBroker, 1500);
+          }
+        });
+      } catch (err) {
+        console.warn('[WebRTC-Signal] Connection exception:', err);
+        brokerIdx++;
+        setTimeout(connectToBroker, 2000);
+      }
+    };
+
+    connectToBroker();
+
+    // Periodic presence broadcast every 5 seconds
+    this.heartbeatInterval = setInterval(() => {
+      if (!this.destroyed && this.mqttClient?.connected) {
         this.broadcast({
-          type: 'announce',
+          type: 'heartbeat',
           peerId: this.localPeerId,
           name: this.displayName,
           isCamOn: this.isCamOn,
           isMicOn: this.isMicOn,
         });
-      };
-
-      this.eventSource.onmessage = (event) => {
-        if (this.destroyed) return;
-        try {
-          const outer = JSON.parse(event.data);
-          if (outer.event === 'message' && outer.message) {
-            const signal = JSON.parse(outer.message);
-            this.handleSignal(signal);
-          }
-        } catch {
-          // Non-JSON or heartbeat
-        }
-      };
-
-      this.eventSource.onerror = () => {
-        // EventSource auto-reconnects natively
-      };
-
-      // Periodic presence broadcast every 5 seconds
-      this.heartbeatInterval = setInterval(() => {
-        if (!this.destroyed) {
-          this.broadcast({
-            type: 'heartbeat',
-            peerId: this.localPeerId,
-            name: this.displayName,
-            isCamOn: this.isCamOn,
-            isMicOn: this.isMicOn,
-          });
-        }
-      }, 5000);
-    } catch (err) {
-      console.warn('[WebRTC] SSE signaling init error:', err);
-    }
+      }
+    }, 5000);
   }
 
   // Sweep and clean up stale peers who left abruptly without explicit leave signal
@@ -204,15 +237,13 @@ export class WebRTCMeshManager {
     }, 4000);
   }
 
-  // Send signal message to ntfy topic
-  private async broadcast(payload: Record<string, any>) {
-    if (this.destroyed) return;
+  // Send signal message to room topic
+  private broadcast(payload: Record<string, any>) {
+    if (this.destroyed || !this.mqttClient) return;
     try {
-      await fetch(this.postUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload),
-      });
+      if (this.mqttClient.connected) {
+        this.mqttClient.publish(this.topic, JSON.stringify(payload), { qos: 0 });
+      }
     } catch (err) {
       console.warn('[WebRTC] Broadcast signal error:', err);
     }
@@ -641,9 +672,11 @@ export class WebRTCMeshManager {
       peerId: this.localPeerId,
     });
 
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
+    if (this.mqttClient) {
+      try {
+        this.mqttClient.end(true);
+      } catch {}
+      this.mqttClient = null;
     }
 
     this.peerConnections.forEach((pc) => pc.close());

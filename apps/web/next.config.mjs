@@ -4,6 +4,8 @@ const baseUrl =
     ? process.env.NEXTAUTH_URL
     : process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
+    : process.env.NODE_ENV === 'production'
+    ? 'https://watchparty-amber-psi.vercel.app'
     : 'http://localhost:3000';
 
 // Generate a unique deployment identifier for every build to guarantee fresh room isolation

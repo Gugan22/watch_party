@@ -6,7 +6,12 @@ import { getRoom, createRoom, isParticipantKicked } from '@/lib/room-store';
 
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'devkey';
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'secret12345678901234567890123456789012';
-const LIVEKIT_WS_URL = process.env.NEXT_PUBLIC_LIVEKIT_WS_URL ?? process.env.LIVEKIT_WS_URL ?? 'ws://localhost:7880';
+const LIVEKIT_WS_URL =
+  process.env.NEXT_PUBLIC_LIVEKIT_WS_URL ??
+  process.env.LIVEKIT_WS_URL ??
+  (process.env.NODE_ENV === 'production'
+    ? 'wss://watchparty-amber-psi.vercel.app'
+    : 'ws://localhost:7880');
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
