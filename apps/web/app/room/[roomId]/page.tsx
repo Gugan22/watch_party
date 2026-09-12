@@ -152,73 +152,37 @@ export default function RoomPage() {
     }
   }, [session, isHost, roomId]);
 
-  // Initialize Media Devices for AV preview
-  useEffect(() => {
-    let active = true;
-    let stream: MediaStream | null = null;
-    let audioContext: AudioContext | null = null;
-    let analyser: AnalyserNode | null = null;
-    let animFrame: number;
-
-    async function initMedia() {
+  // Request user camera and microphone
+  const requestMedia = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+      setLocalStream(stream);
+      setIsCamOn(true);
+      setIsMicOn(true);
+    } catch (videoErr) {
+      console.warn('Could not acquire both video and audio, trying audio only:', videoErr);
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+        const audioStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
-      } catch (videoErr) {
-        console.warn('Could not acquire both video and audio, attempting audio only:', videoErr);
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-          });
-          setIsCamOn(false);
-        } catch (audioErr) {
-          console.warn('Could not acquire microphone audio either:', audioErr);
-        }
+        setLocalStream(audioStream);
+        setIsCamOn(false);
+        setIsMicOn(true);
+      } catch (audioErr) {
+        console.warn('Could not acquire microphone audio either:', audioErr);
       }
-      if (!active || !stream) return;
-      setLocalStream(stream);
-
-        if (lobbyVideoRef.current) {
-          lobbyVideoRef.current.srcObject = stream;
-        }
-
-        try {
-          const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-          audioContext = new AudioCtx();
-          const source = audioContext.createMediaStreamSource(stream);
-          analyser = audioContext.createAnalyser();
-          analyser.fftSize = 64;
-          source.connect(analyser);
-
-          const dataArray = new Uint8Array(analyser.frequencyBinCount);
-          const updateAudio = () => {
-            if (!analyser) return;
-            analyser.getByteFrequencyData(dataArray);
-            const average = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
-            setAudioLevel(Math.min(100, Math.round((average / 128) * 100)));
-            animFrame = requestAnimationFrame(updateAudio);
-          };
-          updateAudio();
-        } catch {
-          // AudioContext fallback
-        }
     }
+  }, []);
 
-    if (stage === 'live') {
-      initMedia();
+  // Request permissions on room entry
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+      requestMedia();
     }
-
-    return () => {
-      active = false;
-      if (animFrame) cancelAnimationFrame(animFrame);
-      if (audioContext) audioContext.close().catch(() => {});
-      if (stage === 'left' && stream) {
-        stream.getTracks().forEach((t) => t.stop());
-      }
-    };
-  }, [stage]);
+  }, [requestMedia]);
 
   // Join Party Action (Unauthenticated guests welcome, direct link access)
   const handleJoinParty = useCallback(async (explicitName?: string) => {
@@ -522,7 +486,7 @@ export default function RoomPage() {
   // Self participant model for video tile rendering
   const selfParticipant: Participant = {
     id: 'self',
-    name: `${displayName} (You)`,
+    name: displayName ? `${displayName.replace(/ \(Host\)$/, '')} (You)` : 'You',
     isSpeaking: false,
     isCamOn,
     isMicOn,
@@ -867,6 +831,7 @@ export default function RoomPage() {
                   participant={selfParticipant}
                   stream={localStream}
                   isSelf
+                  onRequestMedia={requestMedia}
                   onPin={setPinnedId}
                   style={{ width: '160px', height: '100%', flexShrink: 0 }}
                 />
@@ -943,7 +908,13 @@ export default function RoomPage() {
                 />
                 <div className="tile-overlay-badge">Stream Stage</div>
               </div>
-              <VideoTile participant={selfParticipant} stream={localStream} isSelf style={{ minHeight: '220px' }} />
+              <VideoTile
+                participant={selfParticipant}
+                stream={localStream}
+                isSelf
+                onRequestMedia={requestMedia}
+                style={{ minHeight: '220px' }}
+              />
               {participants.length === 0 ? (
                 <div
                   onClick={() => setIsShareModalOpen(true)}
@@ -1011,7 +982,13 @@ export default function RoomPage() {
                 />
               </div>
               <div className="sidebar-participants">
-                <VideoTile participant={selfParticipant} stream={localStream} isSelf style={{ height: '140px' }} />
+                <VideoTile
+                  participant={selfParticipant}
+                  stream={localStream}
+                  isSelf
+                  onRequestMedia={requestMedia}
+                  style={{ height: '140px' }}
+                />
                 {participants.length === 0 ? (
                   <div
                     onClick={() => setIsShareModalOpen(true)}

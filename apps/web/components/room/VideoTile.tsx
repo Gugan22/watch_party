@@ -19,6 +19,7 @@ interface VideoTileProps {
   onPin?: (id: string) => void;
   onKick?: (id: string) => void;
   onToggleHostMute?: (id: string) => void;
+  onRequestMedia?: () => void;
   style?: React.CSSProperties;
 }
 
@@ -31,6 +32,7 @@ export const VideoTile: React.FC<VideoTileProps> = ({
   onPin,
   onKick,
   onToggleHostMute,
+  onRequestMedia,
   style,
 }) => {
   const [showHostMenu, setShowHostMenu] = useState(false);
@@ -40,7 +42,47 @@ export const VideoTile: React.FC<VideoTileProps> = ({
       className={`video-tile ${participant.isSpeaking ? 'speaking' : ''}`}
       style={{ ...style, position: 'relative' }}
     >
-      {isSelf && participant.isCamOn && stream ? (
+      {isSelf && !stream ? (
+        <button
+          type="button"
+          onClick={onRequestMedia}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#FFFFFF',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            cursor: 'pointer',
+            padding: '0.5rem',
+            width: '100%',
+            height: '100%',
+          }}
+          title="Click to enable camera & mic permissions"
+        >
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'rgba(37, 99, 235, 0.15)',
+              border: '1px solid var(--accent-blue)',
+              color: 'var(--accent-blue)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1rem',
+            }}
+          >
+            📷
+          </div>
+          <span style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', fontWeight: 600 }}>
+            Click to Enable Camera
+          </span>
+        </button>
+      ) : isSelf && participant.isCamOn && stream ? (
         <video
           autoPlay
           playsInline
@@ -61,11 +103,11 @@ export const VideoTile: React.FC<VideoTileProps> = ({
           }}
         />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
           <div
             style={{
-              width: '44px',
-              height: '44px',
+              width: '40px',
+              height: '40px',
               borderRadius: 'var(--radius-full)',
               background: 'var(--accent-blue)',
               color: '#FFFFFF',
@@ -78,17 +120,19 @@ export const VideoTile: React.FC<VideoTileProps> = ({
           >
             {participant.name.charAt(0).toUpperCase()}
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
-            {participant.isCamOn ? 'Camera Active' : 'Camera Off'}
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>
+            {participant.isCamOn ? 'Camera On' : 'Camera Off'}
           </div>
         </div>
       )}
 
       {/* Overlay badge with mic status */}
       <div className="tile-overlay-badge">
-        <span>{participant.name}</span>
+        <span title={participant.name}>
+          {isSelf ? `${participant.name.replace(/ \(Host\)/g, '').replace(/ \(You\)/g, '')} (You)` : participant.name}
+        </span>
         {!participant.isMicOn && <span title="Muted by user">🔇</span>}
-        {isMutedForHost && <span title="Muted by host for you" style={{ color: 'var(--warning-amber)' }}>[Host Muted]</span>}
+        {isMutedForHost && <span title="Muted by host for you" style={{ color: 'var(--warning-amber)' }}>[Muted]</span>}
       </div>
 
       {/* Pin button */}
