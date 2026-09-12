@@ -7,7 +7,6 @@ import { getRoom, createRoom, isParticipantKicked } from '@/lib/room-store';
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'devkey';
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'secret12345678901234567890123456789012';
 const LIVEKIT_WS_URL = process.env.NEXT_PUBLIC_LIVEKIT_WS_URL ?? process.env.LIVEKIT_WS_URL ?? 'ws://localhost:7880';
-const HOST_EMAIL = 'gugan2206@gmail.com';
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
@@ -37,12 +36,15 @@ export async function POST(request: Request) {
     };
   }
 
-  // Determine if caller is the authenticated host
-  const isHost = session?.user?.email?.trim().toLowerCase() === HOST_EMAIL;
+  // Determine if caller is the authenticated host of this room
+  const userEmail = session?.user?.email?.trim().toLowerCase();
+  const isHost = userEmail
+    ? (room.hostEmail ? userEmail === room.hostEmail.toLowerCase() : true)
+    : false;
 
   // Participant identity & display name
   const participantIdentity = isHost
-    ? HOST_EMAIL
+    ? (userEmail || `host-${cleanRoomId}`)
     : clientIdentity || `guest-${Math.random().toString(36).substring(2, 9)}`;
 
   // Verify participant has not been kicked by host
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   const participantName = isHost
-    ? (session?.user?.name || 'Gugan (Host)')
+    ? (session?.user?.name ? `${session.user.name} (Host)` : 'Host')
     : (displayName?.trim() || 'Guest');
 
   // Mint LiveKit access token

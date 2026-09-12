@@ -4,8 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
-const ALLOWED_HOST_EMAIL = 'gugan2206@gmail.com';
-
 export default function LandingPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -25,7 +23,7 @@ export default function LandingPage() {
   const [guestDisplayName, setGuestDisplayName] = useState('');
   const [joinError, setJoinError] = useState('');
 
-  const isHost = session?.user?.email?.toLowerCase() === ALLOWED_HOST_EMAIL;
+  const isHost = Boolean(session?.user);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -338,7 +336,7 @@ export default function LandingPage() {
           </div>
         )}
 
-        {/* Tab 2: Create Watch Room (Host Only: gugan2206@gmail.com) */}
+        {/* Tab 2: Create Watch Room (Host Sign-In) */}
         {activeTab === 'create' && (
           <div className="tactile-card" style={{ padding: '1.75rem' }}>
             {!session?.user ? (
@@ -347,10 +345,10 @@ export default function LandingPage() {
                   <GoogleIcon />
                 </div>
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                  Host Authentication Required
+                  Host Sign In Required
                 </h3>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', maxWidth: '440px', margin: '0 auto 1.5rem' }}>
-                  Room creation is currently restricted to party host ({ALLOWED_HOST_EMAIL}). Please sign in with your Google account.
+                  Sign in with your Google account to create and manage your private watch party.
                 </p>
                 <button
                   onClick={() => signIn('google')}
@@ -364,24 +362,7 @@ export default function LandingPage() {
                   }}
                 >
                   <GoogleIcon />
-                  Sign in as Host ({ALLOWED_HOST_EMAIL})
-                </button>
-              </div>
-            ) : !isHost ? (
-              <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
-                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔒</div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                  Access Restricted
-                </h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '440px', margin: '0 auto 1.25rem' }}>
-                  You are signed in as <strong>{session.user.email}</strong>. Only the designated host (<strong>{ALLOWED_HOST_EMAIL}</strong>) is permitted to create rooms.
-                </p>
-                <button
-                  onClick={() => signOut()}
-                  className="tactile-btn tactile-btn-secondary"
-                  style={{ padding: '0.6rem 1.25rem' }}
-                >
-                  Switch Account
+                  Sign in with Google
                 </button>
               </div>
             ) : (
@@ -409,7 +390,7 @@ export default function LandingPage() {
                       <span>👤</span>
                     )}
                     <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{session.user.name || 'Gugan'}</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{session.user.name || 'Host'}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{session.user.email}</div>
                     </div>
                   </div>

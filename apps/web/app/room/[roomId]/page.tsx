@@ -16,7 +16,6 @@ import { CountdownModal } from '@/components/room/CountdownModal';
 import { PostCallView } from '@/components/room/PostCallView';
 
 type LayoutMode = 'spotlight' | 'grid' | 'sidebar';
-const HOST_EMAIL = 'gugan2206@gmail.com';
 
 export default function RoomPage() {
   const router = useRouter();
@@ -25,8 +24,8 @@ export default function RoomPage() {
 
   const roomId = (params?.roomId as string) || 'watch-room';
 
-  // Check if current user is the authorized host
-  const isHost = session?.user?.email?.trim().toLowerCase() === HOST_EMAIL;
+  // Check if current user is an authenticated host
+  const isHost = Boolean(session?.user?.email);
 
   // Room lifecycle stage: 'connecting' | 'live' | 'left'
   const [stage, setStage] = useState<'connecting' | 'live' | 'left'>('connecting');
@@ -104,7 +103,7 @@ export default function RoomPage() {
     if (isHost && session?.user?.name) {
       setDisplayName(`${session.user.name} (Host)`);
     } else if (isHost && session?.user?.email) {
-      setDisplayName('Gugan (Host)');
+      setDisplayName('Host');
     } else {
       const stored = sessionStorage.getItem(`wp_name_${roomId}`);
       if (stored) {
@@ -185,7 +184,7 @@ export default function RoomPage() {
       if (isHost && session?.user?.name) {
         nameToUse = `${session.user.name} (Host)`;
       } else if (isHost) {
-        nameToUse = 'Gugan (Host)';
+        nameToUse = 'Host';
       } else {
         const stored = sessionStorage.getItem(`wp_name_${roomId}`);
         if (stored) {
