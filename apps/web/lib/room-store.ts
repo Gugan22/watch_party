@@ -1,6 +1,6 @@
-// In-memory zero-persistence room registry
 export interface ActiveRoom {
   roomId: string;
+  roomName?: string;
   hostEmail: string;
   hostName: string;
   createdAt: number;
@@ -29,7 +29,13 @@ export function getRoom(roomId: string): ActiveRoom | undefined {
   return room;
 }
 
-export function createRoom(roomId: string, hostEmail: string, hostName: string, expiryHours: number): { success: boolean; error?: string; room?: ActiveRoom } {
+export function createRoom(
+  roomId: string,
+  roomName: string,
+  hostEmail: string,
+  hostName: string,
+  expiryHours: number
+): { success: boolean; error?: string; room?: ActiveRoom } {
   const cleanId = roomId.trim().toLowerCase();
   
   // Enforce unique room id
@@ -43,6 +49,7 @@ export function createRoom(roomId: string, hostEmail: string, hostName: string, 
 
   const room: ActiveRoom = {
     roomId: cleanId,
+    roomName: roomName.trim() || 'Watch Party',
     hostEmail: hostEmail.toLowerCase(),
     hostName,
     createdAt: now,

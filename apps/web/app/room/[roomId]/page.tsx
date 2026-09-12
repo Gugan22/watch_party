@@ -467,11 +467,17 @@ export default function RoomPage() {
             boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.5)',
           }}
         >
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2">
-            <path d="M4 11a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-5z" />
-            <polygon points="10 9 15 12 10 15 10 9" fill="#FFFFFF" />
-            <circle cx="8" cy="4" r="1.5" />
-            <circle cx="16" cy="4" r="1.5" />
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2.5" y="3.5" width="19" height="17" rx="3" stroke="#FFFFFF" strokeWidth="1.8" />
+            <rect x="4.5" y="5.5" width="2" height="2" rx="0.5" fill="#FFFFFF" />
+            <rect x="4.5" y="11" width="2" height="2" rx="0.5" fill="#FFFFFF" />
+            <rect x="4.5" y="16.5" width="2" height="2" rx="0.5" fill="#FFFFFF" />
+            <rect x="17.5" y="5.5" width="2" height="2" rx="0.5" fill="#FFFFFF" />
+            <rect x="17.5" y="11" width="2" height="2" rx="0.5" fill="#FFFFFF" />
+            <rect x="17.5" y="16.5" width="2" height="2" rx="0.5" fill="#FFFFFF" />
+            <line x1="8.5" y1="3.5" x2="8.5" y2="20.5" stroke="#FFFFFF" strokeWidth="1.2" strokeOpacity="0.4" />
+            <line x1="15.5" y1="3.5" x2="15.5" y2="20.5" stroke="#FFFFFF" strokeWidth="1.2" strokeOpacity="0.4" />
+            <path d="M10.8 8.8L14.2 12L10.8 15.2V8.8Z" fill="#FFFFFF" stroke="#FFFFFF" strokeWidth="0.6" strokeLinejoin="round" />
           </svg>
         </div>
 
@@ -555,7 +561,32 @@ export default function RoomPage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontSize: '1.1rem' }}>🎬</span>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'var(--accent-blue-surface)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--accent-blue)',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2.5" y="3.5" width="19" height="17" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                <rect x="4.5" y="5.5" width="2" height="2" rx="0.5" fill="currentColor" />
+                <rect x="4.5" y="11" width="2" height="2" rx="0.5" fill="currentColor" />
+                <rect x="4.5" y="16.5" width="2" height="2" rx="0.5" fill="currentColor" />
+                <rect x="17.5" y="5.5" width="2" height="2" rx="0.5" fill="currentColor" />
+                <rect x="17.5" y="11" width="2" height="2" rx="0.5" fill="currentColor" />
+                <rect x="17.5" y="16.5" width="2" height="2" rx="0.5" fill="currentColor" />
+                <line x1="8.5" y1="3.5" x2="8.5" y2="20.5" stroke="currentColor" strokeWidth="1.2" strokeOpacity="0.35" />
+                <line x1="15.5" y1="3.5" x2="15.5" y2="20.5" stroke="currentColor" strokeWidth="1.2" strokeOpacity="0.35" />
+                <path d="M10.8 8.8L14.2 12L10.8 15.2V8.8Z" fill="currentColor" stroke="currentColor" strokeWidth="0.6" strokeLinejoin="round" />
+              </svg>
+            </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h2 style={{ fontSize: '0.95rem', fontWeight: 700 }}>{roomId}</h2>

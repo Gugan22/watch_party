@@ -11,7 +11,8 @@ export default function LandingPage() {
   // State
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [activeTab, setActiveTab] = useState<'create' | 'join'>('join');
-  const [createRoomId, setCreateRoomId] = useState('interstellar-night');
+  const [createRoomName, setCreateRoomName] = useState('Interstellar Watch Party');
+  const [createdRoomId, setCreatedRoomId] = useState('');
   const [expiryHours, setExpiryHours] = useState<number>(6);
   const [isCreating, setIsCreating] = useState(false);
   const [createdRoomUrl, setCreatedRoomUrl] = useState('');
@@ -39,13 +40,14 @@ export default function LandingPage() {
     setCreateError('');
     setIsCreating(true);
     setCreatedRoomUrl('');
+    setCreatedRoomId('');
 
     try {
       const res = await fetch('/api/rooms/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          roomId: createRoomId,
+          roomName: createRoomName.trim() || 'Watch Party',
           expiryHours,
         }),
       });
@@ -56,6 +58,7 @@ export default function LandingPage() {
       }
 
       setCreatedRoomUrl(data.roomUrl);
+      setCreatedRoomId(data.roomId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error creating room';
       setCreateError(msg);
@@ -69,14 +72,20 @@ export default function LandingPage() {
     e.preventDefault();
     setJoinError('');
 
-    const cleanRoom = joinRoomId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    let input = joinRoomId.trim();
+    if (input.includes('/room/')) {
+      const parts = input.split('/room/')[1]?.split(/[?#]/)[0];
+      if (parts) input = parts;
+    }
+
+    const cleanRoom = input.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     if (!cleanRoom) {
-      setJoinError('Please enter a valid Room ID.');
+      setJoinError('Please enter a valid Room link or code.');
       return;
     }
 
     const cleanName = guestDisplayName.trim() || 'Guest';
-    // Store chosen display name in session storage so room lobby picks it up automatically
+    // Store chosen display name in session storage so room picks it up automatically
     sessionStorage.setItem(`wp_name_${cleanRoom}`, cleanName);
 
     router.push(`/room/${cleanRoom}`);
@@ -137,20 +146,24 @@ export default function LandingPage() {
               color: 'var(--accent-blue)',
             }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 11a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-5z" />
-              <polygon points="10 9 15 12 10 15 10 9" fill="currentColor" />
-              <circle cx="8" cy="4" r="1.5" />
-              <circle cx="16" cy="4" r="1.5" />
+            {/* Film-inspired 35mm Celluloid Frame Logo */}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2.5" y="3.5" width="19" height="17" rx="3" stroke="currentColor" strokeWidth="1.8" />
+              <rect x="4.5" y="5.5" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="4.5" y="11" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="4.5" y="16.5" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="17.5" y="5.5" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="17.5" y="11" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="17.5" y="16.5" width="2" height="2" rx="0.5" fill="currentColor" />
+              <line x1="8.5" y1="3.5" x2="8.5" y2="20.5" stroke="currentColor" strokeWidth="1.2" strokeOpacity="0.35" />
+              <line x1="15.5" y1="3.5" x2="15.5" y2="20.5" stroke="currentColor" strokeWidth="1.2" strokeOpacity="0.35" />
+              <path d="M10.8 8.8L14.2 12L10.8 15.2V8.8Z" fill="currentColor" stroke="currentColor" strokeWidth="0.6" strokeLinejoin="round" />
             </svg>
           </div>
           <div>
-            <h1 style={{ fontSize: '1.15rem', fontWeight: '700', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            <h1 style={{ fontSize: '1.2rem', fontWeight: '800', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
               WatchParty
             </h1>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Zero-Persistence Private Cinema
-            </p>
           </div>
         </div>
 
@@ -282,18 +295,18 @@ export default function LandingPage() {
             <form onSubmit={handleJoinRoom} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
-                  Room ID
+                  Room Link or Code
                 </label>
                 <input
                   type="text"
                   className="tactile-input"
                   value={joinRoomId}
                   onChange={(e) => setJoinRoomId(e.target.value)}
-                  placeholder="e.g. interstellar-night"
+                  placeholder="Paste invite link or enter room code"
                   required
                 />
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                  Enter the unique Room ID provided by your party host.
+                  Paste the full room link or enter the code shared by your host.
                 </p>
               </div>
 
@@ -408,21 +421,21 @@ export default function LandingPage() {
                   </span>
                 </div>
 
-                {/* Unique Room ID */}
+                {/* Room Name */}
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
-                    Unique Room Identifier
+                    Party / Room Name
                   </label>
                   <input
                     type="text"
                     className="tactile-input"
-                    value={createRoomId}
-                    onChange={(e) => setCreateRoomId(e.target.value)}
-                    placeholder="e.g. interstellar-night"
+                    value={createRoomName}
+                    onChange={(e) => setCreateRoomName(e.target.value)}
+                    placeholder="e.g. Interstellar Watch Party"
                     required
                   />
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                    Each room must have a unique identifier.
+                    Give your watch party a name. We'll automatically generate a clean, unique link for your guests.
                   </p>
                 </div>
 
@@ -501,7 +514,7 @@ export default function LandingPage() {
                     marginBottom: '0.75rem',
                   }}
                 >
-                  ✓ Unique Watch Party Room Active! Expires in {expiryHours} hours.
+                  ✓ Watch party "{createRoomName}" is ready! Link expires in {expiryHours} hours.
                 </div>
 
                 <div
@@ -537,7 +550,7 @@ export default function LandingPage() {
 
                 <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem' }}>
                   <button
-                    onClick={() => router.push(`/room/${createRoomId}`)}
+                    onClick={() => router.push(`/room/${createdRoomId}`)}
                     className="tactile-btn tactile-btn-secondary"
                     style={{ flex: 1 }}
                   >

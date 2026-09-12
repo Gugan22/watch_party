@@ -25,9 +25,10 @@ export async function POST(request: Request) {
   // Check if room exists or provision an ephemeral room session for direct link joiners
   let room = getRoom(cleanRoomId);
   if (!room) {
-    const created = createRoom(cleanRoomId, '', 'Host', 12);
+    const created = createRoom(cleanRoomId, 'Watch Party', '', 'Host', 12);
     room = created.room || {
       roomId: cleanRoomId,
+      roomName: 'Watch Party',
       hostEmail: '',
       hostName: 'Host',
       createdAt: Math.floor(Date.now() / 1000),

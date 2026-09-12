@@ -15,17 +15,24 @@ export async function POST(request: Request) {
   const userEmail = session.user.email.trim().toLowerCase();
 
   const body = await request.json().catch(() => ({}));
-  const { roomId, expiryHours } = body as {
+  const { roomName, roomId, expiryHours } = body as {
+    roomName?: string;
     roomId?: string;
     expiryHours?: number;
   };
 
-  const cleanRoomId = (roomId || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+  const displayName = (roomName || roomId || 'Watch Party').trim();
+
+  // App automatically generates a unique URL-safe room ID from the room name
+  let cleanRoomId = (roomId || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
   if (!cleanRoomId || cleanRoomId.length < 3) {
-    return NextResponse.json(
-      { error: 'Room identifier must be at least 3 alphanumeric characters (e.g. interstellar-night)' },
-      { status: 400 }
-    );
+    const slug = displayName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 24) || 'cinema';
+    const randomSuffix = Math.random().toString(36).substring(2, 7);
+    cleanRoomId = `${slug}-${randomSuffix}`;
   }
 
   const parsedExpiry = typeof expiryHours === 'number' ? expiryHours : 6;
@@ -34,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   // Enforce unique room ID in in-memory room store
-  const result = createRoom(cleanRoomId, userEmail, session.user.name || 'Host', parsedExpiry);
+  const result = createRoom(cleanRoomId, displayName, userEmail, session.user.name || 'Host', parsedExpiry);
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
@@ -45,6 +52,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     success: true,
     roomId: cleanRoomId,
+    roomName: displayName,
     roomUrl,
     expiresAt: result.room?.expiresAt,
     hostEmail: userEmail,
