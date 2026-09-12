@@ -106,12 +106,32 @@ export default function RoomPage() {
   const roomStageRef = useRef<HTMLDivElement>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  // Active participants list
-  const [participants, setParticipants] = useState<Participant[]>([
-    { id: 'p1', name: 'Alex Friend', isSpeaking: false, isCamOn: true, isMicOn: true },
-    { id: 'p2', name: 'Sam Miller', isSpeaking: false, isCamOn: true, isMicOn: false },
-    { id: 'p3', name: 'Elena Rostova', isSpeaking: true, isCamOn: true, isMicOn: true },
-  ]);
+  // Active participants list (real connected users only)
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+
+  // Screen / OTT Tab Share Controls
+  const startScreenShare = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+      });
+      setScreenStream(stream);
+      stream.getVideoTracks()[0].onended = () => {
+        setScreenStream(null);
+      };
+    } catch (err) {
+      console.warn('Screen share cancelled or error:', err);
+    }
+  };
+
+  const stopScreenShare = () => {
+    if (screenStream) {
+      screenStream.getTracks().forEach((track) => track.stop());
+      setScreenStream(null);
+    }
+  };
 
   // Transient Reactions
   const [activeReactions, setActiveReactions] = useState<{ id: string; emoji: string; name: string }[]>([]);
@@ -146,8 +166,19 @@ export default function RoomPage() {
           video: true,
           audio: true,
         });
-        if (!active) return;
-        setLocalStream(stream);
+      } catch (videoErr) {
+        console.warn('Could not acquire both video and audio, attempting audio only:', videoErr);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          setIsCamOn(false);
+        } catch (audioErr) {
+          console.warn('Could not acquire microphone audio either:', audioErr);
+        }
+      }
+      if (!active || !stream) return;
+      setLocalStream(stream);
 
         if (lobbyVideoRef.current) {
           lobbyVideoRef.current.srcObject = stream;
@@ -173,9 +204,6 @@ export default function RoomPage() {
         } catch {
           // AudioContext fallback
         }
-      } catch (err) {
-        console.warn('Media preview initialization notice:', err);
-      }
     }
 
     if (stage === 'live') {
@@ -339,22 +367,62 @@ export default function RoomPage() {
     ]);
   };
 
-  // Mic & Camera Toggles
-  const toggleMic = () => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach((track) => {
-        track.enabled = !isMicOn;
-      });
+  // Mic & Camera Toggles (Requests permissions if not already granted)
+  const toggleMic = async () => {
+    if (!localStream) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isCamOn });
+        setLocalStream(stream);
+        setIsMicOn(true);
+      } catch (err) {
+        console.warn('Mic permission error:', err);
+      }
+      return;
     }
+    const audioTracks = localStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const newTrack = newStream.getAudioTracks()[0];
+        localStream.addTrack(newTrack);
+        setIsMicOn(true);
+      } catch (err) {
+        console.warn('Mic track error:', err);
+      }
+      return;
+    }
+    audioTracks.forEach((track) => {
+      track.enabled = !isMicOn;
+    });
     setIsMicOn(!isMicOn);
   };
 
-  const toggleCam = () => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach((track) => {
-        track.enabled = !isCamOn;
-      });
+  const toggleCam = async () => {
+    if (!localStream) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: isMicOn });
+        setLocalStream(stream);
+        setIsCamOn(true);
+      } catch (err) {
+        console.warn('Camera permission error:', err);
+      }
+      return;
     }
+    const videoTracks = localStream.getVideoTracks();
+    if (videoTracks.length === 0) {
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const newTrack = newStream.getVideoTracks()[0];
+        localStream.addTrack(newTrack);
+        setIsCamOn(true);
+      } catch (err) {
+        console.warn('Camera track error:', err);
+      }
+      return;
+    }
+    videoTracks.forEach((track) => {
+      track.enabled = !isCamOn;
+    });
     setIsCamOn(!isCamOn);
   };
 
@@ -681,7 +749,7 @@ export default function RoomPage() {
                 </button>
               </div>
               <span style={{ fontSize: '0.72rem', color: 'var(--success-green)', fontWeight: 600 }}>
-                ● {participants.length + 1} Participants Synced
+                ● {participants.length === 0 ? '1 Participant (You) • Waiting for friends' : `${participants.length + 1} Participants Synced`}
               </span>
             </div>
           </div>
@@ -718,25 +786,6 @@ export default function RoomPage() {
                 </button>
               ))}
             </div>
-
-            <button
-              type="button"
-              onClick={startCountdown}
-              className="tactile-btn tactile-btn-secondary"
-              style={{ padding: '0.4rem 0.7rem', fontSize: '0.75rem' }}
-              title="Trigger 3-2-1 synced playback countdown"
-            >
-              ⏱️ 3-2-1 Countdown
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="tactile-btn tactile-btn-secondary"
-              style={{ padding: '0.4rem 0.7rem', fontSize: '0.75rem' }}
-            >
-              {isFullscreen ? 'Exit Fullscreen' : '⛶ Theater (F)'}
-            </button>
 
             <button
               type="button"
@@ -780,7 +829,19 @@ export default function RoomPage() {
                   <MediaPlayerStage
                     videoRef={moviePlayerRef}
                     localVideoUrl={localVideoUrl}
+                    screenStream={screenStream}
                     onFileSelect={handleFileSelect}
+                    onSetVideoUrl={(url) => {
+                      setLocalVideoUrl(url);
+                      setIsPlaying(true);
+                    }}
+                    onStartScreenShare={startScreenShare}
+                    onStopScreenShare={stopScreenShare}
+                    onClearMedia={() => {
+                      setLocalVideoUrl(null);
+                      setScreenStream(null);
+                      setIsPlaying(false);
+                    }}
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}
                     onPinSelf={() => setPinnedId('self')}
@@ -800,7 +861,7 @@ export default function RoomPage() {
                 )}
               </div>
 
-              {/* Horizontal Participant Strip with Host Controls */}
+              {/* Horizontal Participant Strip */}
               <div className="participant-strip">
                 <VideoTile
                   participant={selfParticipant}
@@ -809,18 +870,50 @@ export default function RoomPage() {
                   onPin={setPinnedId}
                   style={{ width: '160px', height: '100%', flexShrink: 0 }}
                 />
-                {participants.map((p) => (
-                  <VideoTile
-                    key={p.id}
-                    participant={p}
-                    isHostViewer={isHost}
-                    isMutedForHost={hostMutedIds.has(p.id)}
-                    onPin={setPinnedId}
-                    onKick={handleKickParticipant}
-                    onToggleHostMute={handleToggleHostMute}
-                    style={{ width: '160px', height: '100%', flexShrink: 0 }}
-                  />
-                ))}
+                {participants.length === 0 ? (
+                  <div
+                    onClick={() => setIsShareModalOpen(true)}
+                    style={{
+                      width: '160px',
+                      height: '100%',
+                      flexShrink: 0,
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px dashed var(--border-medium)',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px',
+                      cursor: 'pointer',
+                      padding: '0.75rem',
+                      textAlign: 'center',
+                      transition: 'all 0.15s ease',
+                    }}
+                    title="Click to invite friends to join"
+                  >
+                    <span style={{ fontSize: '1.4rem' }}>👥</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Waiting for guests
+                    </span>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', fontWeight: 700 }}>
+                      + Invite Friends
+                    </span>
+                  </div>
+                ) : (
+                  participants.map((p) => (
+                    <VideoTile
+                      key={p.id}
+                      participant={p}
+                      isHostViewer={isHost}
+                      isMutedForHost={hostMutedIds.has(p.id)}
+                      onPin={setPinnedId}
+                      onKick={handleKickParticipant}
+                      onToggleHostMute={handleToggleHostMute}
+                      style={{ width: '160px', height: '100%', flexShrink: 0 }}
+                    />
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -828,28 +921,68 @@ export default function RoomPage() {
           {layoutMode === 'grid' && (
             <div className="layout-grid">
               <div className="video-tile" style={{ minHeight: '220px' }}>
-                {localVideoUrl ? (
-                  <video src={localVideoUrl} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '1rem' }}>
-                    <div style={{ fontSize: '2rem' }}>🎬</div>
-                    <p style={{ color: '#fff', fontSize: '0.85rem' }}>Media Player</p>
-                  </div>
-                )}
+                <MediaPlayerStage
+                  videoRef={moviePlayerRef}
+                  localVideoUrl={localVideoUrl}
+                  screenStream={screenStream}
+                  onFileSelect={handleFileSelect}
+                  onSetVideoUrl={(url) => {
+                    setLocalVideoUrl(url);
+                    setIsPlaying(true);
+                  }}
+                  onStartScreenShare={startScreenShare}
+                  onStopScreenShare={stopScreenShare}
+                  onClearMedia={() => {
+                    setLocalVideoUrl(null);
+                    setScreenStream(null);
+                    setIsPlaying(false);
+                  }}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onPinSelf={() => setPinnedId('self')}
+                />
                 <div className="tile-overlay-badge">Stream Stage</div>
               </div>
               <VideoTile participant={selfParticipant} stream={localStream} isSelf style={{ minHeight: '220px' }} />
-              {participants.map((p) => (
-                <VideoTile
-                  key={p.id}
-                  participant={p}
-                  isHostViewer={isHost}
-                  isMutedForHost={hostMutedIds.has(p.id)}
-                  onKick={handleKickParticipant}
-                  onToggleHostMute={handleToggleHostMute}
-                  style={{ minHeight: '220px' }}
-                />
-              ))}
+              {participants.length === 0 ? (
+                <div
+                  onClick={() => setIsShareModalOpen(true)}
+                  style={{
+                    minHeight: '220px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px dashed var(--border-medium)',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    padding: '1rem',
+                  }}
+                  title="Click to invite friends"
+                >
+                  <span style={{ fontSize: '2rem' }}>👥</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Waiting for friends to join...
+                  </span>
+                  <button type="button" className="tactile-btn tactile-btn-primary" style={{ padding: '4px 12px', fontSize: '0.75rem', marginTop: '4px' }}>
+                    + Share Room Link
+                  </button>
+                </div>
+              ) : (
+                participants.map((p) => (
+                  <VideoTile
+                    key={p.id}
+                    participant={p}
+                    isHostViewer={isHost}
+                    isMutedForHost={hostMutedIds.has(p.id)}
+                    onKick={handleKickParticipant}
+                    onToggleHostMute={handleToggleHostMute}
+                    style={{ minHeight: '220px' }}
+                  />
+                ))
+              )}
             </div>
           )}
 
@@ -859,7 +992,19 @@ export default function RoomPage() {
                 <MediaPlayerStage
                   videoRef={moviePlayerRef}
                   localVideoUrl={localVideoUrl}
+                  screenStream={screenStream}
                   onFileSelect={handleFileSelect}
+                  onSetVideoUrl={(url) => {
+                    setLocalVideoUrl(url);
+                    setIsPlaying(true);
+                  }}
+                  onStartScreenShare={startScreenShare}
+                  onStopScreenShare={stopScreenShare}
+                  onClearMedia={() => {
+                    setLocalVideoUrl(null);
+                    setScreenStream(null);
+                    setIsPlaying(false);
+                  }}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                   onPinSelf={() => setPinnedId('self')}
@@ -867,17 +1012,41 @@ export default function RoomPage() {
               </div>
               <div className="sidebar-participants">
                 <VideoTile participant={selfParticipant} stream={localStream} isSelf style={{ height: '140px' }} />
-                {participants.map((p) => (
-                  <VideoTile
-                    key={p.id}
-                    participant={p}
-                    isHostViewer={isHost}
-                    isMutedForHost={hostMutedIds.has(p.id)}
-                    onKick={handleKickParticipant}
-                    onToggleHostMute={handleToggleHostMute}
-                    style={{ height: '140px' }}
-                  />
-                ))}
+                {participants.length === 0 ? (
+                  <div
+                    onClick={() => setIsShareModalOpen(true)}
+                    style={{
+                      height: '140px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px dashed var(--border-medium)',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px',
+                      cursor: 'pointer',
+                      padding: '0.75rem',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>👥</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Waiting for guests</span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--accent-blue)', fontWeight: 700 }}>+ Share Link</span>
+                  </div>
+                ) : (
+                  participants.map((p) => (
+                    <VideoTile
+                      key={p.id}
+                      participant={p}
+                      isHostViewer={isHost}
+                      isMutedForHost={hostMutedIds.has(p.id)}
+                      onKick={handleKickParticipant}
+                      onToggleHostMute={handleToggleHostMute}
+                      style={{ height: '140px' }}
+                    />
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -905,11 +1074,13 @@ export default function RoomPage() {
           isCamOn={isCamOn}
           isPlaying={isPlaying}
           isFullscreen={isFullscreen}
+          isScreenSharing={Boolean(screenStream)}
           onToggleMic={toggleMic}
           onToggleCam={toggleCam}
           onSendReaction={sendReaction}
           onTogglePlayPause={togglePlayPause}
           onToggleFullscreen={toggleFullscreen}
+          onToggleScreenShare={screenStream ? stopScreenShare : startScreenShare}
           onLeaveRoom={() => setStage('left')}
         />
       </div>

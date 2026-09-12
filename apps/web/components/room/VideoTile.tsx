@@ -46,7 +46,12 @@ export const VideoTile: React.FC<VideoTileProps> = ({
           playsInline
           muted
           ref={(el) => {
-            if (el && stream) el.srcObject = stream;
+            if (el && stream) {
+              if (el.srcObject !== stream) {
+                el.srcObject = stream;
+              }
+              el.play().catch(() => {});
+            }
           }}
           style={{
             width: '100%',
@@ -55,26 +60,27 @@ export const VideoTile: React.FC<VideoTileProps> = ({
             transform: 'scaleX(-1)',
           }}
         />
-      ) : participant.isCamOn ? (
-        <div
-          style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: 'var(--radius-full)',
-            background: 'var(--accent-blue)',
-            color: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 700,
-            fontSize: '1rem',
-          }}
-        >
-          {participant.name.charAt(0).toUpperCase()}
-        </div>
       ) : (
-        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-          📷 {participant.name} (Off)
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: 'var(--radius-full)',
+              background: 'var(--accent-blue)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 700,
+              fontSize: '1.1rem',
+            }}
+          >
+            {participant.name.charAt(0).toUpperCase()}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+            {participant.isCamOn ? 'Camera Active' : 'Camera Off'}
+          </div>
         </div>
       )}
 

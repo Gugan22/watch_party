@@ -7,11 +7,13 @@ interface FloatingDockProps {
   isCamOn: boolean;
   isPlaying: boolean;
   isFullscreen: boolean;
+  isScreenSharing?: boolean;
   onToggleMic: () => void;
   onToggleCam: () => void;
   onSendReaction: (emoji: string) => void;
   onTogglePlayPause: () => void;
   onToggleFullscreen: () => void;
+  onToggleScreenShare?: () => void;
   onLeaveRoom: () => void;
 }
 
@@ -22,11 +24,13 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   isCamOn,
   isPlaying,
   isFullscreen,
+  isScreenSharing = false,
   onToggleMic,
   onToggleCam,
   onSendReaction,
   onTogglePlayPause,
   onToggleFullscreen,
+  onToggleScreenShare,
   onLeaveRoom,
 }) => {
   return (
@@ -88,6 +92,17 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
         >
           {isPlaying ? '⏸️' : '▶️'}
         </button>
+
+        {/* Stream Screen / OTT Tab Button */}
+        {onToggleScreenShare && (
+          <button
+            onClick={onToggleScreenShare}
+            className={`dock-btn ${isScreenSharing ? 'active' : ''}`}
+            title={isScreenSharing ? 'Stop Screen / OTT Stream' : 'Stream Screen / OTT Tab with Audio'}
+          >
+            🖥️
+          </button>
+        )}
 
         {/* Fullscreen Theater Button */}
         <button
