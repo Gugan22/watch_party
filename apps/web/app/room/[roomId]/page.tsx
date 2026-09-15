@@ -1023,12 +1023,13 @@ export default function RoomPage() {
     setTimeout(() => setSyncToastMsg(null), 2800);
   };
 
-  // Play/Pause Video & OTT Sync
+  // Play/Pause Video & Streaming Sync
   const togglePlayPause = () => {
     const nextPlaying = !isPlaying;
     setIsPlaying(nextPlaying);
     const action = nextPlaying ? 'play' : 'pause';
     const currentTime = moviePlayerRef.current?.currentTime || ottSession?.currentTime || 0;
+    const activeUrl = localVideoUrl || ottSession?.url || undefined;
 
     if (moviePlayerRef.current) {
       if (nextPlaying) {
@@ -1037,8 +1038,26 @@ export default function RoomPage() {
         moviePlayerRef.current.pause();
       }
     }
-    meshRef.current?.broadcastPlayerSync(action, currentTime);
-    window.postMessage({ source: 'watchparty-sync', action, time: currentTime }, '*');
+
+    if (ottSession) {
+      const updated = { ...ottSession, isPlaying: nextPlaying, currentTime, lastUpdated: Date.now() };
+      setOttSession(updated);
+      meshRef.current?.broadcastOttSession(updated);
+    }
+
+    meshRef.current?.broadcastPlayerSync(action, currentTime, activeUrl);
+
+    if (typeof window !== 'undefined') {
+      window.postMessage({ source: 'watchparty-sync', action, time: currentTime, url: activeUrl }, '*');
+      try {
+        const bc = new BroadcastChannel('watchparty-sync');
+        bc.postMessage({ source: 'watchparty-sync', action, time: currentTime, url: activeUrl });
+        bc.close();
+      } catch {}
+      try {
+        localStorage.setItem('wp_sync_action', JSON.stringify({ action, time: currentTime, ts: Date.now() }));
+      } catch {}
+    }
   };
 
   // Reusable MediaPlayerStage renderer across all layout modes
