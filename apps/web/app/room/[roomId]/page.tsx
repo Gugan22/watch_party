@@ -1353,66 +1353,8 @@ export default function RoomPage() {
             </div>
           </div>
 
-          {/* Layout Controls & Actions */}
+          {/* Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {/* 4-Mode View Switcher */}
-            <div
-              style={{
-                display: 'flex',
-                background: 'var(--bg-raised)',
-                padding: '2px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-subtle)',
-              }}
-            >
-              {(['theater', 'spotlight', 'grid', 'sidebar'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setLayoutMode(mode)}
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: 'none',
-                    background: layoutMode === mode ? 'var(--bg-surface)' : 'transparent',
-                    color: layoutMode === mode ? 'var(--accent-blue)' : 'var(--text-secondary)',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                  }}
-                >
-                  <span>{mode === 'theater' ? '🎬' : mode === 'spotlight' ? '🎯' : mode === 'grid' ? '⊞' : '◫'}</span>
-                  <span style={{ textTransform: 'capitalize' }}>{mode}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Host-Only Playback Sync Button */}
-            {isHost && (
-              <button
-                type="button"
-                onClick={handleHostSyncAll}
-                className="tactile-btn tactile-btn-primary"
-                style={{
-                  padding: '0.4rem 0.85rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
-                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)',
-                }}
-                title="Sync: Play for all attendees across the room"
-              >
-                <span>⚡</span>
-                <span>Sync</span>
-              </button>
-            )}
-
             <button
               type="button"
               onClick={() => setIsChatOpen(!isChatOpen)}
