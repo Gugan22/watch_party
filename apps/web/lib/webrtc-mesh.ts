@@ -115,12 +115,17 @@ export class WebRTCMeshManager {
     if (audioTrack) audioTrack.enabled = isMicOn;
     if (videoTrack) videoTrack.enabled = isCamOn;
 
-    this.peerConnections.forEach((pc) => {
+    this.peerConnections.forEach((pc, remotePeerId) => {
       const transceivers = pc.getTransceivers();
-      const audioTransceiver = transceivers.find((t) => t.sender.track?.kind === 'audio' || t.receiver.track?.kind === 'audio');
-      const videoTransceiver = transceivers.find((t) => t.sender.track?.kind === 'video' || t.receiver.track?.kind === 'video');
+      const audioTransceiver = transceivers.find(
+        (t) => t.sender.track?.kind === 'audio' || t.receiver.track?.kind === 'audio'
+      );
+      const videoTransceiver = transceivers.find(
+        (t) => t.sender.track?.kind === 'video' || t.receiver.track?.kind === 'video'
+      );
 
       if (videoTransceiver) {
+        videoTransceiver.direction = 'sendrecv';
         videoTransceiver.sender.replaceTrack(videoTrack && isCamOn ? videoTrack : null).catch(() => {});
       } else if (videoTrack && pc.signalingState === 'stable') {
         try {
@@ -129,11 +134,17 @@ export class WebRTCMeshManager {
       }
 
       if (audioTransceiver) {
+        audioTransceiver.direction = 'sendrecv';
         audioTransceiver.sender.replaceTrack(audioTrack && isMicOn ? audioTrack : null).catch(() => {});
       } else if (audioTrack && pc.signalingState === 'stable') {
         try {
           pc.addTrack(audioTrack, stream!);
         } catch {}
+      }
+
+      // If connection is already stable and local peer is initiator, renegotiate to guarantee tracks sync
+      if (pc.signalingState === 'stable' && this.localPeerId > remotePeerId) {
+        this.initiateCall(remotePeerId);
       }
     });
 
@@ -490,20 +501,31 @@ export class WebRTCMeshManager {
     pc.ontrack = (event) => {
       const peer = this.remotePeers.get(remotePeerId);
       if (peer) {
+        if (event.track.kind === 'audio') {
+          event.track.enabled = true;
+          peer.isMicOn = true;
+        }
+        if (event.track.kind === 'video') {
+          peer.isCamOn = true;
+        }
         const stream = event.streams[0] || new MediaStream([event.track]);
         stream.getTracks().forEach((track) => {
           if (!peer.stream.getTracks().some((t) => t.id === track.id)) {
             peer.stream.addTrack(track);
           }
         });
-        if (event.track.kind === 'video') {
-          peer.isCamOn = true;
-          this.emit('peerMediaChanged', remotePeerId, true, peer.isMicOn);
-        }
         const freshStream = new MediaStream(peer.stream.getTracks());
         peer.stream = freshStream;
         peer.lastSeen = Date.now();
+        this.emit('peerMediaChanged', remotePeerId, peer.isCamOn, peer.isMicOn);
         this.emit('peerStreamUpdated', remotePeerId, freshStream);
+      }
+    };
+
+    // Auto-renegotiate if local tracks are added/changed and local peer is initiator
+    pc.onnegotiationneeded = async () => {
+      if (this.localPeerId > remotePeerId && pc.signalingState === 'stable') {
+        await this.initiateCall(remotePeerId);
       }
     };
 
@@ -567,7 +589,10 @@ export class WebRTCMeshManager {
       }
       this.pendingCandidates.delete(remotePeerId);
 
-      const answer = await pc.createAnswer();
+      const answer = await pc.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
       await pc.setLocalDescription(answer);
 
       this.broadcast({

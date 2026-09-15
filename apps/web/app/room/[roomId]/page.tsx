@@ -20,7 +20,38 @@ import { PrivatePingModal } from '@/components/room/PrivatePingModal';
 import { PrivatePingToast, type ReceivedPing } from '@/components/room/PrivatePingToast';
 import { WebRTCMeshManager } from '@/lib/webrtc-mesh';
 
-type LayoutMode = 'spotlight' | 'grid' | 'sidebar';
+type LayoutMode = 'theater' | 'spotlight' | 'grid' | 'sidebar';
+
+// Persistent root audio sink for remote peers - guaranteed playback across all layouts including Theater mode
+function RemoteAudioSink({
+  participantId,
+  stream,
+  isMuted,
+}: {
+  participantId: string;
+  stream?: MediaStream | null;
+  isMuted: boolean;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !stream) return;
+    if (el.srcObject !== stream) {
+      el.srcObject = stream;
+    }
+    el.muted = isMuted;
+    const playPromise = el.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        // Will be resumed by global click/touch listener if blocked by autoplay policy
+        console.warn(`[AudioSink] Autoplay waiting for user gesture for peer ${participantId}:`, err);
+      });
+    }
+  }, [stream, isMuted, participantId]);
+
+  return <audio ref={audioRef} autoPlay playsInline muted={isMuted} style={{ display: 'none' }} />;
+}
 
 export default function RoomPage() {
   const router = useRouter();
@@ -89,6 +120,7 @@ export default function RoomPage() {
   const [pinnedId, setPinnedId] = useState<string>('media-player');
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isTopBarHovered, setIsTopBarHovered] = useState(false);
   const [showReactionPiP, setShowReactionPiP] = useState(true);
   const [countdownNum, setCountdownNum] = useState<number | null>(null);
 
@@ -176,12 +208,20 @@ export default function RoomPage() {
     }
   }, [session, isHost, roomId]);
 
-  // Request user camera and microphone
+  // Request user camera and microphone with optimal voice settings
   const requestMedia = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 24 },
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
       setLocalStream(stream);
       setIsCamOn(true);
@@ -190,7 +230,11 @@ export default function RoomPage() {
       console.warn('Could not acquire both video and audio, trying audio only:', videoErr);
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
         });
         setLocalStream(audioStream);
         setIsCamOn(false);
@@ -512,10 +556,12 @@ export default function RoomPage() {
     }
   };
 
-  // Open private ping modal
-  const handleOpenPingModal = useCallback((targetId: string, targetName: string) => {
-    setActivePingTarget({ id: targetId, name: targetName });
+  // Open private direct message in chat drawer (Zoom / Teams style)
+  const handleOpenDirectChat = useCallback((targetId: string, _targetName?: string) => {
+    setSelectedChatRecipientId(targetId);
+    setIsChatOpen(true);
   }, []);
+  const handleOpenPingModal = handleOpenDirectChat;
 
   // Send private ping
   const handleSendPrivatePing = useCallback((targetId: string, message: string) => {
@@ -693,6 +739,37 @@ export default function RoomPage() {
     meshRef.current?.setLocalStream(localStream, nextCam, isMicOn);
   };
 
+  // Global user interaction trigger to unlock browser autoplay audio policy
+  useEffect(() => {
+    const unlockAudio = () => {
+      document.querySelectorAll('audio').forEach((audio) => {
+        if (!audio.muted && audio.paused && audio.srcObject) {
+          audio.play().catch(() => {});
+        }
+      });
+    };
+
+    window.addEventListener('click', unlockAudio, { passive: true });
+    window.addEventListener('touchstart', unlockAudio, { passive: true });
+    window.addEventListener('keydown', unlockAudio, { passive: true });
+
+    const handleFsChange = () => {
+      const active = Boolean(document.fullscreenElement);
+      setIsFullscreen(active);
+      if (!active) {
+        setIsTopBarHovered(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+      document.removeEventListener('fullscreenchange', handleFsChange);
+    };
+  }, []);
+
   // Fullscreen Theater toggle
   const toggleFullscreen = () => {
     if (!roomStageRef.current) return;
@@ -702,7 +779,18 @@ export default function RoomPage() {
     } else {
       document.exitFullscreen().catch(() => {});
       setIsFullscreen(false);
+      setIsTopBarHovered(false);
     }
+  };
+
+  // Cycle room layout modes (Theater -> Spotlight -> Grid -> Sidebar -> Theater)
+  const cycleLayoutMode = () => {
+    setLayoutMode((prev) => {
+      if (prev === 'theater') return 'spotlight';
+      if (prev === 'spotlight') return 'grid';
+      if (prev === 'grid') return 'sidebar';
+      return 'theater';
+    });
   };
 
   // Keyboard Shortcuts: 'F' for Fullscreen, 'H' for reactions
@@ -959,16 +1047,61 @@ export default function RoomPage() {
     <div ref={roomStageRef} className="room-container">
       {/* Main Video & Playback Stage */}
       <div className="stage-main">
-        {/* Top Control Bar */}
+        {/* Persistent Audio Sink for all remote participants - active across all layouts & Theater mode */}
+        <div style={{ display: 'none' }} aria-hidden="true">
+          {participants.map((p) => (
+            <RemoteAudioSink
+              key={p.id}
+              participantId={p.id}
+              stream={p.stream}
+              isMuted={hostMutedIds.has(p.id)}
+            />
+          ))}
+        </div>
+
+        {/* Fullscreen top-edge hover trigger zone */}
+        {isFullscreen && (
+          <div
+            onMouseEnter={() => setIsTopBarHovered(true)}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '36px',
+              zIndex: 49,
+              pointerEvents: 'auto',
+            }}
+          />
+        )}
+
+        {/* Top Control Bar - Minimal, Classic, with Hover Reveal in Fullscreen */}
         <header
+          onMouseEnter={() => setIsTopBarHovered(true)}
+          onMouseLeave={() => setIsTopBarHovered(false)}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'var(--bg-surface)',
-            padding: '0.5rem 1rem',
-            borderRadius: 'var(--radius-md)',
+            background: isFullscreen ? 'rgba(15, 23, 42, 0.92)' : 'var(--bg-surface)',
+            padding: '0.45rem 1rem',
+            borderRadius: isFullscreen ? 'var(--radius-lg)' : 'var(--radius-md)',
             border: '1px solid var(--border-subtle)',
+            backdropFilter: isFullscreen ? 'blur(16px)' : undefined,
+            boxShadow: isFullscreen && isTopBarHovered ? '0 16px 36px rgba(0, 0, 0, 0.7)' : undefined,
+            ...(isFullscreen
+              ? {
+                  position: 'absolute',
+                  top: '12px',
+                  left: '16px',
+                  right: '16px',
+                  zIndex: 50,
+                  transform: isTopBarHovered ? 'translateY(0)' : 'translateY(-140%)',
+                  opacity: isTopBarHovered ? 1 : 0,
+                  transition: 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease',
+                  pointerEvents: isTopBarHovered ? 'auto' : 'none',
+                }
+              : {}),
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -1015,30 +1148,6 @@ export default function RoomPage() {
                     HOST
                   </span>
                 )}
-                {/* Host-Only Share Link Button */}
-                {isHost && (
-                  <button
-                    type="button"
-                    onClick={() => setIsShareModalOpen(true)}
-                    className="tactile-btn tactile-btn-secondary"
-                    style={{
-                      padding: '2px 8px',
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      color: 'var(--accent-blue)',
-                      borderColor: 'rgba(59, 130, 246, 0.4)',
-                      background: 'var(--accent-blue-surface)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      cursor: 'pointer',
-                      borderRadius: 'var(--radius-full)',
-                    }}
-                    title="Share watch party invite link with friends"
-                  >
-                    🔗 Share Link
-                  </button>
-                )}
                 {/* Editable Display Name Badge */}
                 <button
                   type="button"
@@ -1068,8 +1177,9 @@ export default function RoomPage() {
             </div>
           </div>
 
-          {/* Layout Controls */}
+          {/* Layout Controls & Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {/* 4-Mode View Switcher */}
             <div
               style={{
                 display: 'flex',
@@ -1079,7 +1189,7 @@ export default function RoomPage() {
                 border: '1px solid var(--border-subtle)',
               }}
             >
-              {(['spotlight', 'grid', 'sidebar'] as const).map((mode) => (
+              {(['theater', 'spotlight', 'grid', 'sidebar'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
@@ -1092,11 +1202,14 @@ export default function RoomPage() {
                     color: layoutMode === mode ? 'var(--accent-blue)' : 'var(--text-secondary)',
                     fontSize: '0.75rem',
                     fontWeight: 600,
-                    textTransform: 'capitalize',
                     cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
                   }}
                 >
-                  {mode}
+                  <span>{mode === 'theater' ? '🎬' : mode === 'spotlight' ? '🎯' : mode === 'grid' ? '⊞' : '◫'}</span>
+                  <span style={{ textTransform: 'capitalize' }}>{mode}</span>
                 </button>
               ))}
             </div>
@@ -1110,32 +1223,68 @@ export default function RoomPage() {
               💬 Chat
             </button>
 
-            {/* Host-Only Share Button in Action Toolbar */}
-            {isHost && (
-              <button
-                type="button"
-                onClick={() => setIsShareModalOpen(true)}
-                className="tactile-btn tactile-btn-secondary"
-                style={{
-                  padding: '0.4rem 0.75rem',
-                  fontSize: '0.75rem',
-                  color: 'var(--accent-blue)',
-                  borderColor: 'rgba(59, 130, 246, 0.4)',
-                  fontWeight: 600,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-                title="Share party link"
-              >
-                🔗 Share
-              </button>
-            )}
+            {/* Clean Share Button */}
+            <button
+              type="button"
+              onClick={() => setIsShareModalOpen(true)}
+              className="tactile-btn tactile-btn-secondary"
+              style={{
+                padding: '0.4rem 0.75rem',
+                fontSize: '0.75rem',
+                color: 'var(--accent-blue)',
+                borderColor: 'rgba(59, 130, 246, 0.4)',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+              title="Share party link"
+            >
+              🔗 Share
+            </button>
           </div>
         </header>
 
         {/* Dynamic Layout Stage */}
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          {/* Theater Mode: 100% Movie Stage with Zero Grid */}
+          {layoutMode === 'theater' && (
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#000000',
+                borderRadius: isFullscreen ? 0 : 'var(--radius-md)',
+                overflow: 'hidden',
+                position: 'relative',
+              }}
+            >
+              <MediaPlayerStage
+                videoRef={moviePlayerRef}
+                localVideoUrl={localVideoUrl}
+                screenStream={screenStream}
+                onFileSelect={handleFileSelect}
+                onSetVideoUrl={(url) => {
+                  setLocalVideoUrl(url);
+                  setIsPlaying(true);
+                  meshRef.current?.broadcastPlayerSync('play', 0, url);
+                }}
+                onStartScreenShare={startScreenShare}
+                onStopScreenShare={stopScreenShare}
+                onClearMedia={() => {
+                  setLocalVideoUrl(null);
+                  setScreenStream(null);
+                  setIsPlaying(false);
+                }}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onPinSelf={() => setPinnedId('self')}
+              />
+            </div>
+          )}
+
           {layoutMode === 'spotlight' && (
             <div className="layout-spotlight">
               <div className="focal-player">
@@ -1411,6 +1560,8 @@ export default function RoomPage() {
           isPlaying={isPlaying}
           isFullscreen={isFullscreen}
           isScreenSharing={Boolean(screenStream)}
+          layoutMode={layoutMode}
+          onCycleLayoutMode={cycleLayoutMode}
           onToggleMic={toggleMic}
           onToggleCam={toggleCam}
           onSendReaction={sendReaction}

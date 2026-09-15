@@ -8,12 +8,14 @@ interface FloatingDockProps {
   isPlaying: boolean;
   isFullscreen: boolean;
   isScreenSharing?: boolean;
+  layoutMode?: 'theater' | 'spotlight' | 'grid' | 'sidebar';
   onToggleMic: () => void;
   onToggleCam: () => void;
   onSendReaction: (emoji: string) => void;
   onTogglePlayPause: () => void;
   onToggleFullscreen: () => void;
   onToggleScreenShare?: () => void;
+  onCycleLayoutMode?: () => void;
   onLeaveRoom: () => void;
 }
 
@@ -25,12 +27,14 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   isPlaying,
   isFullscreen,
   isScreenSharing = false,
+  layoutMode = 'spotlight',
   onToggleMic,
   onToggleCam,
   onSendReaction,
   onTogglePlayPause,
   onToggleFullscreen,
   onToggleScreenShare,
+  onCycleLayoutMode,
   onLeaveRoom,
 }) => {
   return (
@@ -112,6 +116,17 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
         >
           {isFullscreen ? '⤦' : '⛶'}
         </button>
+
+        {/* Mode Switcher Button */}
+        {onCycleLayoutMode && (
+          <button
+            onClick={onCycleLayoutMode}
+            className={`dock-btn ${layoutMode === 'theater' ? 'active' : ''}`}
+            title={`Current View: ${layoutMode || 'spotlight'}. Click to switch view mode.`}
+          >
+            {layoutMode === 'theater' ? '🎬' : layoutMode === 'spotlight' ? '🎯' : layoutMode === 'grid' ? '⊞' : '◫'}
+          </button>
+        )}
 
         {/* Leave Room Button */}
         <button

@@ -93,11 +93,6 @@ export const VideoTile: React.FC<VideoTileProps> = ({
       className={`video-tile ${participant.isSpeaking ? 'speaking' : ''}`}
       style={{ ...style, position: 'relative', overflow: 'hidden' }}
     >
-      {/* Background audio playback for remote peers */}
-      {!isSelf && activeStream && (
-        <audio ref={audioRef} autoPlay playsInline />
-      )}
-
       {/* Main tile content: Active Camera Video, Permission Request prompt, or Avatar */}
       {isSelf && !activeStream ? (
         <button
@@ -152,12 +147,16 @@ export const VideoTile: React.FC<VideoTileProps> = ({
           }}
           autoPlay
           playsInline
-          muted={true} // Dedicated <audio> tag below plays remote sound; <video> must be muted to satisfy browser autoplay requirements!
+          muted={true}
+          disablePictureInPicture={true}
+          controlsList="nodownload nofullscreen noremoteplayback"
+          data-edge-overlay="false"
           style={{
             width: '100%',
             height: '100%',
             objectFit: 'cover',
             transform: isSelf ? 'scaleX(-1)' : 'none',
+            pointerEvents: 'none', // Prevents Microsoft Edge from showing floating mini-menu (Translate and PiP)
           }}
         />
       ) : (
@@ -237,7 +236,7 @@ export const VideoTile: React.FC<VideoTileProps> = ({
         </button>
       )}
 
-      {/* Private Ping button for remote participants */}
+      {/* Direct Message button for remote participants */}
       {!isSelf && onPing && (
         <button
           type="button"
@@ -252,9 +251,9 @@ export const VideoTile: React.FC<VideoTileProps> = ({
             border: '1px solid rgba(167, 139, 250, 0.5)',
             boxShadow: '0 2px 6px rgba(0, 0, 0, 0.4)',
           }}
-          title={`Ping ${participant.name} privately`}
+          title={`Send direct message to ${participant.name}`}
         >
-          🔔
+          💬
         </button>
       )}
 
