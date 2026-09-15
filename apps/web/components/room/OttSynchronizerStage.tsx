@@ -45,7 +45,7 @@ const PLATFORM_THEMES: Record<string, { name: string; bg: string; accent: string
     icon: '🎬',
   },
   custom: {
-    name: 'OTT Stream',
+    name: 'Streaming Service',
     bg: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(11, 13, 17, 0.95) 100%)',
     accent: '#3B82F6',
     icon: '🌐',
@@ -213,7 +213,7 @@ export const OttSynchronizerStage: React.FC<OttSynchronizerStageProps> = ({
             color: '#FFFFFF',
           }}
         >
-          {session.title || 'OTT Cinema Party'}
+          {session.title || 'Streaming Cinema Party'}
         </h3>
 
         <p

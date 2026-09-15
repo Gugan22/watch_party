@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { OttSession } from '@watch-party/shared';
-import { OttSyncModal } from './OttSyncModal';
+import type { OttPlatform, OttSession } from '@watch-party/shared';
 import { YouTubePlayerStage } from './YouTubePlayerStage';
 import { OttSynchronizerStage } from './OttSynchronizerStage';
 
@@ -28,8 +27,42 @@ interface MediaPlayerStageProps {
   isPinned?: boolean;
 }
 
-function isYouTubeUrl(url: string): boolean {
-  return /youtube\.com|youtu\.be/.test(url);
+// Smart Streaming Platform Detection (Supports 100+ services, YouTube, and Direct Video)
+function detectStreamingPlatform(rawUrl: string): {
+  platform: OttPlatform;
+  title: string;
+  isDirectVideo: boolean;
+} {
+  const url = rawUrl.trim().toLowerCase();
+
+  if (/youtube\.com|youtu\.be/.test(url)) {
+    return { platform: 'youtube', title: 'YouTube Video', isDirectVideo: false };
+  }
+  if (/netflix\.com/.test(url)) {
+    return { platform: 'netflix', title: 'Netflix Title', isDirectVideo: false };
+  }
+  if (/primevideo\.com|amazon\.[a-z.]+\/(gp\/video|video)/.test(url)) {
+    return { platform: 'prime', title: 'Prime Video Movie', isDirectVideo: false };
+  }
+  if (/disneyplus\.com|hotstar\.com/.test(url)) {
+    return { platform: 'disney', title: 'Disney+ / Hotstar', isDirectVideo: false };
+  }
+  if (/crunchyroll\.com/.test(url)) {
+    return { platform: 'crunchyroll', title: 'Crunchyroll Anime', isDirectVideo: false };
+  }
+  if (/\.(mp4|m3u8|webm|mov|mkv)(\?|$)/i.test(url)) {
+    return { platform: 'custom', title: 'Direct Video Stream', isDirectVideo: true };
+  }
+
+  // Generic streaming service / web link (Max, Hulu, Apple TV, Twitch, Vimeo, etc.)
+  try {
+    const hostname = new URL(rawUrl).hostname.replace(/^www\./, '');
+    const serviceName = hostname.split('.')[0];
+    const capitalized = serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
+    return { platform: 'custom', title: `${capitalized} Stream`, isDirectVideo: false };
+  } catch {
+    return { platform: 'custom', title: 'Streaming Service', isDirectVideo: false };
+  }
 }
 
 export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
@@ -53,36 +86,74 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
   onPinSelf,
   isPinned = false,
 }) => {
-  const [showUrlInput, setShowUrlInput] = useState(false);
   const [streamUrl, setStreamUrl] = useState('');
-  const [showOttModal, setShowOttModal] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
-  const handleUrlSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const url = streamUrl.trim();
+  const processAndPlayUrl = (inputUrl: string) => {
+    const url = inputUrl.trim();
     if (!url) return;
 
-    if (isYouTubeUrl(url)) {
+    const detected = detectStreamingPlatform(url);
+
+    if (detected.isDirectVideo) {
+      onSetVideoUrl?.(url);
+    } else {
       onSetOttSession?.({
-        platform: 'youtube',
-        title: 'YouTube Stream',
+        platform: detected.platform,
+        title: detected.title,
         url,
         currentTime: 0,
         isPlaying: true,
         lastUpdated: Date.now(),
       });
-    } else {
-      onSetVideoUrl?.(url);
     }
-    setShowUrlInput(false);
+    setStreamUrl('');
   };
 
-  const handleSelectOtt = (session: OttSession) => {
-    onSetOttSession?.(session);
+  const handleUrlSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    processAndPlayUrl(streamUrl);
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        const text = await navigator.clipboard.readText();
+        if (text && text.trim().startsWith('http')) {
+          setStreamUrl(text.trim());
+          processAndPlayUrl(text.trim());
+        }
+      }
+    } catch (err) {
+      console.warn('Clipboard read permission denied or unavailable:', err);
+    }
+  };
+
+  // Drag-and-drop local video file directly onto the cinema stage
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('video/')) {
+      const syntheticEvent = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+      onFileSelect(syntheticEvent);
+    }
   };
 
   return (
     <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       style={{
         width: '100%',
         height: '100%',
@@ -90,9 +161,10 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#000000',
+        background: isDragOver ? 'rgba(37, 99, 235, 0.15)' : '#000000',
         borderRadius: 'var(--radius-lg)',
         overflow: 'hidden',
+        transition: 'background 0.2s ease',
       }}
     >
       {/* 1. Live Screen Share (Legacy / Optional Fallback) */}
@@ -133,7 +205,7 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
             }}
           >
             <span style={{ color: 'var(--danger-red)', fontSize: '0.9rem' }}>●</span>
-            <span>Live Screen Stream (Tab Audio Active)</span>
+            <span>Live Screen Stream</span>
             {onStopScreenShare && (
               <button
                 type="button"
@@ -147,7 +219,7 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
           </div>
         </div>
       ) : ottSession ? (
-        /* 2. Active OTT Session (YouTube Native Embed or External OTT Synchronizer) */
+        /* 2. Active Streaming Services Session (YouTube Native Embed or Synchronizer Console) */
         ottSession.platform === 'youtube' ? (
           <YouTubePlayerStage
             url={ottSession.url}
@@ -191,7 +263,7 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
         )
       ) : localVideoUrl ? (
         /* 3. Video Player Active (File or Direct Stream URL) */
-        isYouTubeUrl(localVideoUrl) ? (
+        detectStreamingPlatform(localVideoUrl).platform === 'youtube' ? (
           <YouTubePlayerStage
             url={localVideoUrl}
             isPlaying={isPlaying}
@@ -251,59 +323,149 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
           </div>
         )
       ) : (
-        /* 4. Empty State: OTT & Media Selection Hub */
-        <div style={{ textAlign: 'center', padding: '2rem 1.5rem', maxWidth: '580px', width: '100%' }}>
-          <div style={{ fontSize: '3.2rem', marginBottom: '0.5rem' }}>🍿</div>
+        /* 4. Streamlined Universal Cinema Stage (Zero Popups, One Universal Input) */
+        <div
+          className="animate-fade-in"
+          style={{
+            textAlign: 'center',
+            padding: '2.5rem 1.75rem',
+            maxWidth: '680px',
+            width: '90%',
+            background: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: 'var(--radius-xl)',
+            boxShadow: '0 24px 48px rgba(0, 0, 0, 0.7), 0 0 60px rgba(56, 189, 248, 0.08)',
+          }}
+        >
+          <div style={{ fontSize: '3rem', marginBottom: '0.5rem', lineHeight: 1 }}>🍿</div>
           <h3
             style={{
-              fontSize: '1.3rem',
+              fontSize: '1.5rem',
               fontWeight: 800,
+              letterSpacing: '-0.02em',
               marginBottom: '0.4rem',
               color: '#FFFFFF',
             }}
           >
-            Select Movie or Sync OTT Watch Party
+            Ready for the Movie?
           </h3>
           <p
             style={{
-              fontSize: '0.85rem',
+              fontSize: '0.88rem',
               color: '#94A3B8',
-              marginBottom: '1.5rem',
-              lineHeight: 1.4,
+              marginBottom: '1.75rem',
+              lineHeight: 1.5,
+              maxWidth: '520px',
+              margin: '0 auto 1.75rem auto',
             }}
           >
-            Sync Netflix, Prime Video, Disney+, or YouTube natively with 0 screen share lag, or stream local movies and direct links.
+            Paste a link from any streaming service, YouTube, or video URL to sync playback across everyone's screen with zero lag.
           </p>
 
-          {/* Primary Action Buttons */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
-            {/* 1. Choose Movie to Sync */}
+          {/* Universal Single Input Bar */}
+          <form
+            onSubmit={handleUrlSubmit}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(255, 255, 255, 0.07)',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              borderRadius: 'var(--radius-full)',
+              padding: '6px 8px 6px 16px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.1)',
+              marginBottom: '1.25rem',
+            }}
+          >
+            <span style={{ fontSize: '1rem', opacity: 0.7 }}>🔗</span>
+            <input
+              type="url"
+              value={streamUrl}
+              onChange={(e) => setStreamUrl(e.target.value)}
+              placeholder="Paste any streaming link (Netflix, Prime, Disney+, YouTube, .mp4)..."
+              required
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: '#FFFFFF',
+                fontSize: '0.88rem',
+                fontFamily: 'inherit',
+                padding: '0.4rem 0.2rem',
+              }}
+            />
+
+            {/* Quick 1-Click Clipboard Paste Action */}
             <button
               type="button"
-              onClick={() => setShowOttModal(true)}
-              className="tactile-btn tactile-btn-primary"
+              onClick={handlePasteFromClipboard}
+              title="Paste link from clipboard and play"
+              className="tactile-btn"
               style={{
-                padding: '0.9rem 1rem',
-                fontSize: '0.88rem',
-                display: 'flex',
+                padding: '0.4rem 0.75rem',
+                fontSize: '0.75rem',
+                color: '#38BDF8',
+                background: 'rgba(56, 189, 248, 0.12)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                borderRadius: 'var(--radius-full)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
-                boxShadow: '0 4px 16px rgba(37, 99, 235, 0.4)',
+                gap: '4px',
+                whiteSpace: 'nowrap',
               }}
             >
-              <span>🍿</span>
-              <span>Choose Movie to Sync</span>
+              <span>📋</span>
+              <span>Paste</span>
             </button>
 
-            {/* 2. Local File */}
+            {/* Start Button */}
+            <button
+              type="submit"
+              className="tactile-btn tactile-btn-primary"
+              style={{
+                padding: '0.55rem 1.25rem',
+                fontSize: '0.88rem',
+                fontWeight: 700,
+                borderRadius: 'var(--radius-full)',
+                background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>▶️ Start Party</span>
+            </button>
+          </form>
+
+          {/* Quick Alternative Actions: Local File & Screen Share */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginBottom: '1.5rem',
+            }}
+          >
+            {/* Play Local Video File */}
             <label
               className="tactile-btn tactile-btn-secondary"
-              style={{ cursor: 'pointer', padding: '0.9rem 1rem', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              style={{
+                cursor: 'pointer',
+                padding: '0.45rem 0.95rem',
+                fontSize: '0.78rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                borderRadius: 'var(--radius-full)',
+              }}
             >
               <span>📁</span>
-              <span>Local Movie File</span>
+              <span>Play Local Movie File</span>
               <input
                 type="file"
                 accept="video/*"
@@ -312,85 +474,60 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
               />
             </label>
 
-            {/* 3. Direct Online URL */}
-            <button
-              type="button"
-              onClick={() => setShowUrlInput(!showUrlInput)}
-              className="tactile-btn tactile-btn-secondary"
-              style={{ padding: '0.9rem 1rem', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-            >
-              <span>🌐</span>
-              <span>Direct Video URL</span>
-            </button>
-          </div>
-
-          {/* Online URL Input Form */}
-          {showUrlInput && (
-            <form
-              onSubmit={handleUrlSubmit}
-              className="animate-fade-in"
-              style={{
-                display: 'flex',
-                gap: '0.5rem',
-                background: 'rgba(255, 255, 255, 0.08)',
-                padding: '0.5rem',
-                borderRadius: 'var(--radius-md)',
-                marginBottom: '1rem',
-              }}
-            >
-              <input
-                type="url"
-                value={streamUrl}
-                onChange={(e) => setStreamUrl(e.target.value)}
-                placeholder="Paste video or YouTube link (.mp4, .m3u8, youtube.com)"
-                required
-                style={{
-                  flex: 1,
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  color: '#FFFFFF',
-                  padding: '0.4rem 0.6rem',
-                  fontSize: '0.85rem',
-                }}
-              />
-              <button
-                type="submit"
-                className="tactile-btn tactile-btn-primary"
-                style={{ padding: '0.45rem 1rem', fontSize: '0.85rem' }}
-              >
-                Load
-              </button>
-            </form>
-          )}
-
-          {/* Legacy Screen Share Trigger (Optional Fallback) */}
-          {onStartScreenShare && (
-            <div style={{ marginTop: '0.75rem' }}>
+            {/* Optional Fallback Screen Share */}
+            {onStartScreenShare && (
               <button
                 type="button"
                 onClick={onStartScreenShare}
+                className="tactile-btn tactile-btn-secondary"
                 style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#64748B',
+                  padding: '0.45rem 0.95rem',
                   fontSize: '0.78rem',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '4px',
+                  gap: '6px',
+                  borderRadius: 'var(--radius-full)',
+                  color: '#94A3B8',
                 }}
               >
                 <span>🖥️</span>
-                <span>Need to mirror an arbitrary window? Use Screen Share</span>
+                <span>Share Screen</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
+
+          {/* Supported Streaming Services Badges */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              fontSize: '0.72rem',
+              color: '#64748B',
+              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+              paddingTop: '1rem',
+            }}
+          >
+            <span>🍿 Netflix</span>
+            <span>•</span>
+            <span>📦 Prime Video</span>
+            <span>•</span>
+            <span>✨ Disney+</span>
+            <span>•</span>
+            <span>▶️ YouTube</span>
+            <span>•</span>
+            <span>🎬 Crunchyroll</span>
+            <span>•</span>
+            <span>🍎 Apple TV+</span>
+            <span>•</span>
+            <span style={{ color: '#38BDF8', fontWeight: 600 }}>🌐 100+ Streaming Services</span>
+          </div>
         </div>
       )}
 
-      {/* Pin button */}
+      {/* Pin Stage Button */}
       <button
         onClick={onPinSelf}
         className="tile-pin-btn"
@@ -399,15 +536,6 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
       >
         📌 {isPinned ? 'Unpin' : 'Stage'}
       </button>
-
-      {/* OTT Sync Modal */}
-      <OttSyncModal
-        isOpen={showOttModal}
-        onClose={() => setShowOttModal(false)}
-        onSelectOtt={handleSelectOtt}
-        onStartLegacyScreenShare={onStartScreenShare}
-        currentSession={ottSession}
-      />
     </div>
   );
 };

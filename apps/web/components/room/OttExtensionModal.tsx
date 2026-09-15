@@ -109,7 +109,7 @@ export const OttExtensionModal: React.FC<OttExtensionModalProps> = ({ isOpen, on
           <div style={{ fontSize: '2rem' }}>⚡</div>
           <div>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              OTT Auto-Sync Setup
+              Streaming Auto-Sync Setup
             </h3>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
               Netflix, Amazon Prime Video, Disney+ Hotstar & Crunchyroll

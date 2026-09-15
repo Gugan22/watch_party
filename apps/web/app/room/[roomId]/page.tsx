@@ -18,7 +18,6 @@ import { ShareRoomModal } from '@/components/room/ShareRoomModal';
 import { NamePromptModal } from '@/components/room/NamePromptModal';
 import { PrivatePingModal } from '@/components/room/PrivatePingModal';
 import { PrivatePingToast, type ReceivedPing } from '@/components/room/PrivatePingToast';
-import { OttSyncModal } from '@/components/room/OttSyncModal';
 import { WebRTCMeshManager } from '@/lib/webrtc-mesh';
 
 type LayoutMode = 'theater' | 'spotlight' | 'grid' | 'sidebar';
@@ -147,11 +146,10 @@ export default function RoomPage() {
   ]);
   const [chatInput, setChatInput] = useState('');
 
-  // Local Video Player & Native OTT state
+  // Local Video Player & Native Streaming Services state
   const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ottSession, setOttSession] = useState<OttSession | null>(null);
-  const [isOttModalOpen, setIsOttModalOpen] = useState(false);
   const [syncToastMsg, setSyncToastMsg] = useState<string | null>(null);
   const ottSessionRef = useRef<OttSession | null>(null);
   ottSessionRef.current = ottSession;
@@ -986,9 +984,10 @@ export default function RoomPage() {
   const handleHostSyncAll = () => {
     if (!isHost) return;
 
-    // If no media loaded yet, open the modal so host can choose a movie/stream to sync
+    // If no media loaded yet, prompt the host to paste a link on screen
     if (!localVideoUrl && !ottSession && !screenStream) {
-      setIsOttModalOpen(true);
+      setSyncToastMsg('🎬 Paste a streaming or movie link on screen to start party sync!');
+      setTimeout(() => setSyncToastMsg(null), 3200);
       return;
     }
 
@@ -1928,15 +1927,6 @@ export default function RoomPage() {
         isOpen={isShareModalOpen}
         roomId={roomId}
         onClose={() => setIsShareModalOpen(false)}
-      />
-
-      {/* Sync OTT Watch Party Modal */}
-      <OttSyncModal
-        isOpen={isOttModalOpen}
-        onClose={() => setIsOttModalOpen(false)}
-        onSelectOtt={handleSetOttSession}
-        onStartLegacyScreenShare={startScreenShare}
-        currentSession={ottSession}
       />
 
       {/* Mandatory Guest Name Entry Modal */}

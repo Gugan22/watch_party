@@ -117,12 +117,12 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
           </button>
         )}
 
-        {/* Stream Screen / OTT Tab Button */}
+        {/* Stream Screen / Tab Button */}
         {onToggleScreenShare && (
           <button
             onClick={onToggleScreenShare}
             className={`dock-btn ${isScreenSharing ? 'active' : ''}`}
-            title={isScreenSharing ? 'Stop Screen / OTT Stream' : 'Stream Screen / OTT Tab with Audio'}
+            title={isScreenSharing ? 'Stop Screen Stream' : 'Stream Screen / Tab with Audio'}
           >
             🖥️
           </button>
