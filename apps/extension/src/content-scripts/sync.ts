@@ -52,7 +52,28 @@ export function initSyncEngine(roomId: string = 'live-party') {
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
-  // 3. Inject floating overlay if top frame
+  // 3. Listen to incoming sync commands (from WatchParty room tab or bookmarklet)
+  window.addEventListener('message', (e) => {
+    if (!e.data || e.data.source !== 'watchparty-sync') return;
+    const { action, time } = e.data;
+    if (!trackedVideo) return;
+
+    isRemoteAction = true;
+    if (typeof time === 'number' && Math.abs(trackedVideo.currentTime - time) > 1.5) {
+      trackedVideo.currentTime = time;
+    }
+    if (action === 'play' && trackedVideo.paused) {
+      trackedVideo.play().catch(() => {});
+    } else if (action === 'pause' && !trackedVideo.paused) {
+      trackedVideo.pause();
+    }
+
+    setTimeout(() => {
+      isRemoteAction = false;
+    }, 500);
+  });
+
+  // 4. Inject floating overlay if top frame
   if (window.self === window.top) {
     injectFloatingOverlay(roomId, () => {
       // Pop-out clean embed helper

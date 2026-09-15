@@ -24,6 +24,13 @@ const nextConfig = {
     NEXT_PUBLIC_BASE_URL: baseUrl,
     NEXT_PUBLIC_DEPLOY_ID: deployId,
   },
+  webpack: (config) => {
+    config.resolve.extensionAlias = {
+      '.js': ['.ts', '.tsx', '.js', '.jsx'],
+      '.mjs': ['.mts', '.mjs'],
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

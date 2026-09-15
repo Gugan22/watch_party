@@ -1,33 +1,57 @@
 'use client';
 
 import React, { useState } from 'react';
+import type { OttSession } from '@watch-party/shared';
+import { OttSyncModal } from './OttSyncModal';
+import { YouTubePlayerStage } from './YouTubePlayerStage';
+import { OttSynchronizerStage } from './OttSynchronizerStage';
 
 interface MediaPlayerStageProps {
   videoRef: React.RefObject<HTMLVideoElement>;
   localVideoUrl: string | null;
   screenStream?: MediaStream | null;
+  ottSession?: OttSession | null;
+  roomId?: string;
+  isHost?: boolean;
+  isPlaying?: boolean;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSetVideoUrl?: (url: string) => void;
+  onSetOttSession?: (session: OttSession) => void;
+  onTriggerCountdown?: (action: 'play' | 'pause', targetTime: number) => void;
+  onSeek?: (time: number) => void;
   onStartScreenShare?: () => void;
   onStopScreenShare?: () => void;
   onClearMedia?: () => void;
   onPlay: () => void;
   onPause: () => void;
   onPinSelf: () => void;
+  isPinned?: boolean;
+}
+
+function isYouTubeUrl(url: string): boolean {
+  return /youtube\.com|youtu\.be/.test(url);
 }
 
 export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
   videoRef,
   localVideoUrl,
   screenStream,
+  ottSession,
+  roomId = 'party',
+  isHost = false,
+  isPlaying = false,
   onFileSelect,
   onSetVideoUrl,
+  onSetOttSession,
+  onTriggerCountdown,
+  onSeek,
   onStartScreenShare,
   onStopScreenShare,
   onClearMedia,
   onPlay,
   onPause,
   onPinSelf,
+  isPinned = false,
 }) => {
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [streamUrl, setStreamUrl] = useState('');
@@ -35,9 +59,26 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
 
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!streamUrl.trim()) return;
-    onSetVideoUrl?.(streamUrl.trim());
+    const url = streamUrl.trim();
+    if (!url) return;
+
+    if (isYouTubeUrl(url)) {
+      onSetOttSession?.({
+        platform: 'youtube',
+        title: 'YouTube Stream',
+        url,
+        currentTime: 0,
+        isPlaying: true,
+        lastUpdated: Date.now(),
+      });
+    } else {
+      onSetVideoUrl?.(url);
+    }
     setShowUrlInput(false);
+  };
+
+  const handleSelectOtt = (session: OttSession) => {
+    onSetOttSession?.(session);
   };
 
   return (
@@ -54,7 +95,7 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
         overflow: 'hidden',
       }}
     >
-      {/* 1. Live Screen / OTT Tab Stream Active */}
+      {/* 1. Live Screen Share (Legacy / Optional Fallback) */}
       {screenStream ? (
         <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <video
@@ -92,7 +133,7 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
             }}
           >
             <span style={{ color: 'var(--danger-red)', fontSize: '0.9rem' }}>●</span>
-            <span>Live OTT / Screen Stream (Tab Audio Active)</span>
+            <span>Live Screen Stream (Tab Audio Active)</span>
             {onStopScreenShare && (
               <button
                 type="button"
@@ -105,79 +146,161 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
             )}
           </div>
         </div>
-      ) : localVideoUrl ? (
-        /* 2. Video Player Active (File or Stream URL) */
-        <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-          <video
-            ref={videoRef}
-            src={localVideoUrl}
-            controls
-            playsInline
-            style={{
-              width: '100%',
-              height: '100%',
-              maxHeight: '100%',
-              objectFit: 'contain',
+      ) : ottSession ? (
+        /* 2. Active OTT Session (YouTube Native Embed or External OTT Synchronizer) */
+        ottSession.platform === 'youtube' ? (
+          <YouTubePlayerStage
+            url={ottSession.url}
+            title={ottSession.title}
+            isPlaying={isPlaying}
+            onPlay={(time) => {
+              onPlay();
+              onSeek?.(time);
             }}
-            onPlay={onPlay}
-            onPause={onPause}
+            onPause={(time) => {
+              onPause();
+              onSeek?.(time);
+            }}
+            onSeek={(time) => onSeek?.(time)}
+            onClearMedia={() => onClearMedia?.()}
+            onPinStage={onPinSelf}
+            isPinned={isPinned}
           />
-          {onClearMedia && (
-            <button
-              type="button"
-              onClick={onClearMedia}
+        ) : (
+          <OttSynchronizerStage
+            session={ottSession}
+            roomId={roomId}
+            isHost={isHost}
+            isPlaying={isPlaying}
+            onPlay={(time) => {
+              onPlay();
+              onSeek?.(time);
+            }}
+            onPause={(time) => {
+              onPause();
+              onSeek?.(time);
+            }}
+            onSeek={(time) => onSeek?.(time)}
+            onTriggerCountdown={(action, targetTime) =>
+              onTriggerCountdown?.(action, targetTime)
+            }
+            onClearMedia={() => onClearMedia?.()}
+            onPinStage={onPinSelf}
+            isPinned={isPinned}
+          />
+        )
+      ) : localVideoUrl ? (
+        /* 3. Video Player Active (File or Direct Stream URL) */
+        isYouTubeUrl(localVideoUrl) ? (
+          <YouTubePlayerStage
+            url={localVideoUrl}
+            isPlaying={isPlaying}
+            onPlay={(time) => {
+              onPlay();
+              onSeek?.(time);
+            }}
+            onPause={(time) => {
+              onPause();
+              onSeek?.(time);
+            }}
+            onSeek={(time) => onSeek?.(time)}
+            onClearMedia={() => onClearMedia?.()}
+            onPinStage={onPinSelf}
+            isPinned={isPinned}
+          />
+        ) : (
+          <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+            <video
+              ref={videoRef}
+              src={localVideoUrl}
+              controls
+              playsInline
               style={{
-                position: 'absolute',
-                top: '12px',
-                left: '12px',
-                background: 'rgba(0, 0, 0, 0.75)',
-                backdropFilter: 'blur(8px)',
-                color: '#FFFFFF',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '4px 10px',
-                fontSize: '0.75rem',
-                cursor: 'pointer',
-                fontWeight: 600,
-                zIndex: 10,
+                width: '100%',
+                height: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
               }}
-              title="Switch video source"
-            >
-              🔄 Change Media
-            </button>
-          )}
-        </div>
+              onPlay={onPlay}
+              onPause={onPause}
+            />
+            {onClearMedia && (
+              <button
+                type="button"
+                onClick={onClearMedia}
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  left: '12px',
+                  background: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(8px)',
+                  color: '#FFFFFF',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '4px 10px',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  zIndex: 10,
+                }}
+                title="Switch video source"
+              >
+                🔄 Change Media
+              </button>
+            )}
+          </div>
+        )
       ) : (
-        /* 3. Empty State: Media Selector Options */
+        /* 4. Empty State: OTT & Media Selection Hub */
         <div style={{ textAlign: 'center', padding: '2rem 1.5rem', maxWidth: '580px', width: '100%' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🎬</div>
+          <div style={{ fontSize: '3.2rem', marginBottom: '0.5rem' }}>🍿</div>
           <h3
             style={{
-              fontSize: '1.25rem',
-              fontWeight: 700,
+              fontSize: '1.3rem',
+              fontWeight: 800,
               marginBottom: '0.4rem',
               color: '#FFFFFF',
             }}
           >
-            Select Movie or Stream for Synced Playback
+            Select Movie or Sync OTT Watch Party
           </h3>
           <p
             style={{
-              fontSize: '0.875rem',
+              fontSize: '0.85rem',
               color: '#94A3B8',
               marginBottom: '1.5rem',
               lineHeight: 1.4,
             }}
           >
-            Stream local videos, online video links, or share your Netflix / Prime / Disney+ tab with audio.
+            Sync Netflix, Prime Video, Disney+, or YouTube natively with 0 screen share lag, or stream local movies and direct links.
           </p>
 
           {/* Primary Action Buttons */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
-            {/* 1. Local File */}
-            <label
+            {/* 1. Sync OTT (Netflix, Prime, YouTube) */}
+            <button
+              type="button"
+              onClick={() => setShowOttModal(true)}
               className="tactile-btn tactile-btn-primary"
-              style={{ cursor: 'pointer', padding: '0.85rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              style={{
+                padding: '0.9rem 1rem',
+                fontSize: '0.88rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                boxShadow: '0 4px 16px rgba(37, 99, 235, 0.4)',
+              }}
+            >
+              <span>🍿</span>
+              <span>Sync OTT Watch Party</span>
+            </button>
+
+            {/* 2. Local File */}
+            <label
+              className="tactile-btn tactile-btn-secondary"
+              style={{ cursor: 'pointer', padding: '0.9rem 1rem', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             >
               <span>📁</span>
               <span>Local Movie File</span>
@@ -189,28 +312,15 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
               />
             </label>
 
-            {/* 2. Stream Screen / OTT Tab */}
-            {onStartScreenShare && (
-              <button
-                type="button"
-                onClick={onStartScreenShare}
-                className="tactile-btn tactile-btn-secondary"
-                style={{ padding: '0.85rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'rgba(37, 99, 235, 0.15)', borderColor: 'var(--accent-blue)', color: '#FFFFFF' }}
-              >
-                <span>🖥️</span>
-                <span>Stream OTT Tab</span>
-              </button>
-            )}
-
-            {/* 3. Online URL */}
+            {/* 3. Direct Online URL */}
             <button
               type="button"
               onClick={() => setShowUrlInput(!showUrlInput)}
               className="tactile-btn tactile-btn-secondary"
-              style={{ padding: '0.85rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              style={{ padding: '0.9rem 1rem', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             >
               <span>🌐</span>
-              <span>Online Video URL</span>
+              <span>Direct Video URL</span>
             </button>
           </div>
 
@@ -232,7 +342,7 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
                 type="url"
                 value={streamUrl}
                 onChange={(e) => setStreamUrl(e.target.value)}
-                placeholder="Paste direct video URL (.mp4, .m3u8, .webm)"
+                placeholder="Paste video or YouTube link (.mp4, .m3u8, youtube.com)"
                 required
                 style={{
                   flex: 1,
@@ -254,25 +364,29 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
             </form>
           )}
 
-          {/* OTT Sync Guide Trigger */}
-          <button
-            type="button"
-            onClick={() => setShowOttModal(true)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--accent-blue)',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <span>🍿</span>
-            <span>How does Netflix, Prime Video & OTT sync work?</span>
-          </button>
+          {/* Legacy Screen Share Trigger (Optional Fallback) */}
+          {onStartScreenShare && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={onStartScreenShare}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#64748B',
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span>🖥️</span>
+                <span>Need to mirror an arbitrary window? Use Screen Share</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -283,109 +397,17 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
         style={{ opacity: 0.9, top: '12px', right: '12px' }}
         title="Pin/Unpin video player"
       >
-        📌 Stage
+        📌 {isPinned ? 'Unpin' : 'Stage'}
       </button>
 
-      {/* OTT Sync Guide Modal */}
-      {showOttModal && (
-        <div
-          onClick={() => setShowOttModal(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.8)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.25rem',
-            zIndex: 300,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="tactile-card animate-fade-in"
-            style={{
-              maxWidth: '520px',
-              width: '100%',
-              padding: '1.75rem',
-              background: 'var(--bg-surface)',
-              color: 'var(--text-primary)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--border-medium)',
-              boxShadow: 'var(--shadow-tactile)',
-              position: 'relative',
-              textAlign: 'left',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setShowOttModal(false)}
-              style={{
-                position: 'absolute',
-                top: '1.25rem',
-                right: '1.25rem',
-                width: '30px',
-                height: '30px',
-                borderRadius: '50%',
-                background: 'var(--bg-raised)',
-                border: '1px solid var(--border-subtle)',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-              }}
-            >
-              ✕
-            </button>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
-              <div style={{ fontSize: '1.8rem' }}>🍿</div>
-              <div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  OTT & Streaming Sync Guide
-                </h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Netflix, Disney+, Prime Video & Streaming Sites
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              <div style={{ padding: '0.85rem', background: 'var(--bg-raised)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
-                  1. Stream Screen / OTT Tab (Instant, Zero Setup)
-                </strong>
-                Click <strong>"Stream OTT Tab"</strong> above and select your browser tab running Netflix, Prime Video, or Disney+. Make sure to check <em>"Share tab audio"</em>. Everyone in the room will watch and hear the movie in real-time without needing their own subscription!
-              </div>
-
-              <div style={{ padding: '0.85rem', background: 'var(--bg-raised)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
-                  2. Online Direct Video Stream
-                </strong>
-                Have a direct MP4, HLS (.m3u8), or WebM stream link? Paste it into <strong>"Online Video URL"</strong> to load it into the synchronized cinema stage.
-              </div>
-
-              <div style={{ padding: '0.85rem', background: 'var(--bg-raised)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
-                  3. Browser Extension (Free Streaming Players)
-                </strong>
-                For free streaming sites (e.g., Megacloud, Rabbitstream), our Chrome/Edge extension in <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>apps/extension</code> intercepts the player iframe and synchronizes play/pause without popup ads.
-              </div>
-            </div>
-
-            <div style={{ marginTop: '1.25rem', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={() => setShowOttModal(false)}
-                className="tactile-btn tactile-btn-primary"
-                style={{ padding: '0.55rem 1.25rem', fontSize: '0.85rem' }}
-              >
-                Got It
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* OTT Sync Modal */}
+      <OttSyncModal
+        isOpen={showOttModal}
+        onClose={() => setShowOttModal(false)}
+        onSelectOtt={handleSelectOtt}
+        onStartLegacyScreenShare={onStartScreenShare}
+        currentSession={ottSession}
+      />
     </div>
   );
 };

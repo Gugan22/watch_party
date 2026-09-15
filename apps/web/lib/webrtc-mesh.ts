@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@watch-party/shared';
+import type { ChatMessage, OttSession } from '@watch-party/shared';
 import mqtt, { type MqttClient } from 'mqtt';
 
 export interface RemotePeerInfo {
@@ -19,6 +19,8 @@ export type WebRTCEventMap = {
   chatMessage: (msg: ChatMessage) => void;
   reaction: (emoji: string, name: string) => void;
   playerSync: (action: 'play' | 'pause' | 'seek', time: number, url?: string) => void;
+  ottSync: (session: OttSession | null) => void;
+  countdownSync: (action: 'play' | 'pause', targetTime: number, seconds: number) => void;
   kicked: () => void;
   privatePing: (fromPeerId: string, fromName: string, message: string) => void;
 };
@@ -397,6 +399,18 @@ export class WebRTCMeshManager {
         break;
       }
 
+      case 'ott-session': {
+        this.emit('ottSync', signal.session ?? null);
+        break;
+      }
+
+      case 'countdown-sync': {
+        if (signal.action) {
+          this.emit('countdownSync', signal.action, signal.targetTime ?? 0, signal.seconds ?? 3);
+        }
+        break;
+      }
+
       case 'private-ping': {
         if (signal.targetId === this.localPeerId) {
           this.emit('privatePing', signal.from, signal.fromName || 'Someone', signal.message || '👋 Pinged you privately!');
@@ -703,6 +717,24 @@ export class WebRTCMeshManager {
       action,
       time,
       url,
+    });
+  }
+
+  public broadcastOttSession(session: OttSession | null) {
+    this.broadcast({
+      type: 'ott-session',
+      from: this.localPeerId,
+      session,
+    });
+  }
+
+  public broadcastCountdownSync(action: 'play' | 'pause', targetTime: number, seconds: number = 3) {
+    this.broadcast({
+      type: 'countdown-sync',
+      from: this.localPeerId,
+      action,
+      targetTime,
+      seconds,
     });
   }
 

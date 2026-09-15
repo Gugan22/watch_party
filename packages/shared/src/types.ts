@@ -66,3 +66,17 @@ export interface LocalFileMeta {
 }
 
 export type LayoutMode = 'spotlight' | 'grid' | 'sidebar';
+
+export type OttPlatform = 'netflix' | 'prime' | 'disney' | 'youtube' | 'crunchyroll' | 'custom';
+
+export interface OttSession {
+  platform: OttPlatform;
+  title: string;
+  url: string;
+  currentTime: number;
+  isPlaying: boolean;
+  lastUpdated: number;
+  hostPeerId?: string;
+  hostName?: string;
+  duration?: number;
+}

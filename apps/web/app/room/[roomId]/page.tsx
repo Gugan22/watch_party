@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import type { ChatMessage } from '@watch-party/shared';
+import type { ChatMessage, OttSession } from '@watch-party/shared';
 import { useWakeLock } from '@/hooks/useWakeLock';
 
 // Modular room sub-components
@@ -18,6 +18,7 @@ import { ShareRoomModal } from '@/components/room/ShareRoomModal';
 import { NamePromptModal } from '@/components/room/NamePromptModal';
 import { PrivatePingModal } from '@/components/room/PrivatePingModal';
 import { PrivatePingToast, type ReceivedPing } from '@/components/room/PrivatePingToast';
+import { OttSyncModal } from '@/components/room/OttSyncModal';
 import { WebRTCMeshManager } from '@/lib/webrtc-mesh';
 
 type LayoutMode = 'theater' | 'spotlight' | 'grid' | 'sidebar';
@@ -139,9 +140,13 @@ export default function RoomPage() {
   ]);
   const [chatInput, setChatInput] = useState('');
 
-  // Local Video Player state
+  // Local Video Player & Native OTT state
   const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [ottSession, setOttSession] = useState<OttSession | null>(null);
+  const [isOttModalOpen, setIsOttModalOpen] = useState(false);
+  const ottSessionRef = useRef<OttSession | null>(null);
+  ottSessionRef.current = ottSession;
 
   // Media streams & DOM refs
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -396,21 +401,16 @@ export default function RoomPage() {
     mesh.on('peerJoined', (peer) => {
       setParticipants((prev) => {
         if (prev.some((p) => p.id === peer.id)) return prev;
-        return [
-          ...prev,
-          {
-            id: peer.id,
-            name: peer.name,
-            isSpeaking: false,
-            isCamOn: peer.isCamOn,
-            isMicOn: peer.isMicOn,
-            stream: peer.stream,
-          },
-        ];
+        return [...prev, peer];
       });
 
-      setMessages((prev) => [
-        ...prev,
+      // If host has an active OTT session, broadcast to newcomer
+      if (isHost && ottSessionRef.current) {
+        mesh.broadcastOttSession(ottSessionRef.current);
+      }
+
+      setMessages((m) => [
+        ...m,
         {
           id: Math.random().toString(),
           senderId: 'system',
@@ -480,6 +480,9 @@ export default function RoomPage() {
       if (url && url !== localVideoUrl) {
         setLocalVideoUrl(url);
       }
+      if (ottSessionRef.current) {
+        setOttSession((prev) => (prev ? { ...prev, currentTime: time, isPlaying: action === 'play' } : null));
+      }
       if (moviePlayerRef.current) {
         if (Math.abs(moviePlayerRef.current.currentTime - time) > 1.5) {
           moviePlayerRef.current.currentTime = time;
@@ -491,7 +494,27 @@ export default function RoomPage() {
           moviePlayerRef.current.pause();
           setIsPlaying(false);
         }
+      } else {
+        setIsPlaying(action === 'play');
       }
+
+      // Broadcast to local browser tabs/extensions via window.postMessage
+      if (typeof window !== 'undefined') {
+        window.postMessage({ source: 'watchparty-sync', action, time, url }, '*');
+      }
+    });
+
+    // Remote OTT party session sync
+    mesh.on('ottSync', (session) => {
+      setOttSession(session);
+      if (session) {
+        setIsPlaying(session.isPlaying);
+      }
+    });
+
+    // Remote countdown sync
+    mesh.on('countdownSync', (action, targetTime, seconds) => {
+      runCountdownSync(action, targetTime, seconds);
     });
 
     // Remote kicked handler
@@ -890,33 +913,123 @@ export default function RoomPage() {
     setIsPlaying(false);
   };
 
-  // Play/Pause Video
-  const togglePlayPause = () => {
-    if (!moviePlayerRef.current) return;
-    if (isPlaying) {
-      moviePlayerRef.current.pause();
-      setIsPlaying(false);
-      meshRef.current?.broadcastPlayerSync('pause', moviePlayerRef.current.currentTime);
-    } else {
-      moviePlayerRef.current.play().catch(() => {});
-      setIsPlaying(true);
-      meshRef.current?.broadcastPlayerSync('play', moviePlayerRef.current.currentTime);
-    }
+  // Countdown Sync implementation
+  const runCountdownSync = (action: 'play' | 'pause', targetTime: number, seconds: number = 3) => {
+    let count = seconds;
+    setCountdownNum(count);
+    const interval = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        setCountdownNum(count);
+      } else {
+        clearInterval(interval);
+        setCountdownNum(null);
+        if (action === 'play') {
+          if (moviePlayerRef.current) {
+            moviePlayerRef.current.currentTime = targetTime;
+            moviePlayerRef.current.play().catch(() => {});
+          }
+          setIsPlaying(true);
+          window.postMessage({ source: 'watchparty-sync', action: 'play', time: targetTime }, '*');
+        } else {
+          if (moviePlayerRef.current) {
+            moviePlayerRef.current.pause();
+          }
+          setIsPlaying(false);
+          window.postMessage({ source: 'watchparty-sync', action: 'pause', time: targetTime }, '*');
+        }
+      }
+    }, 1000);
   };
 
-  // Mobile 3-2-1 Countdown Trigger
-  const startCountdown = () => {
-    setCountdownNum(3);
-    setTimeout(() => setCountdownNum(2), 1000);
-    setTimeout(() => setCountdownNum(1), 2000);
-    setTimeout(() => {
-      setCountdownNum(null);
-      if (moviePlayerRef.current) {
-        moviePlayerRef.current.play().catch(() => {});
-        setIsPlaying(true);
-      }
-    }, 3000);
+  const triggerCountdownSync = (action: 'play' | 'pause', targetTime: number) => {
+    meshRef.current?.broadcastCountdownSync(action, targetTime, 3);
+    runCountdownSync(action, targetTime, 3);
   };
+
+  const handleSetOttSession = (newSession: OttSession) => {
+    setOttSession(newSession);
+    setIsPlaying(newSession.isPlaying);
+    meshRef.current?.broadcastOttSession(newSession);
+    window.postMessage({ source: 'watchparty-sync', type: 'ott-session', session: newSession }, '*');
+  };
+
+  const handleClearMedia = () => {
+    setLocalVideoUrl(null);
+    setScreenStream(null);
+    setOttSession(null);
+    setIsPlaying(false);
+    meshRef.current?.broadcastOttSession(null);
+    meshRef.current?.broadcastPlayerSync('pause', 0);
+  };
+
+  const handleSeek = (time: number) => {
+    if (moviePlayerRef.current) {
+      moviePlayerRef.current.currentTime = time;
+    }
+    if (ottSession) {
+      setOttSession((prev) => (prev ? { ...prev, currentTime: time } : null));
+    }
+    meshRef.current?.broadcastPlayerSync('seek', time);
+    window.postMessage({ source: 'watchparty-sync', action: 'seek', time }, '*');
+  };
+
+  // Play/Pause Video & OTT Sync
+  const togglePlayPause = () => {
+    const nextPlaying = !isPlaying;
+    setIsPlaying(nextPlaying);
+    const action = nextPlaying ? 'play' : 'pause';
+    const currentTime = moviePlayerRef.current?.currentTime || ottSession?.currentTime || 0;
+
+    if (moviePlayerRef.current) {
+      if (nextPlaying) {
+        moviePlayerRef.current.play().catch(() => {});
+      } else {
+        moviePlayerRef.current.pause();
+      }
+    }
+    meshRef.current?.broadcastPlayerSync(action, currentTime);
+    window.postMessage({ source: 'watchparty-sync', action, time: currentTime }, '*');
+  };
+
+  // Reusable MediaPlayerStage renderer across all layout modes
+  const renderMediaPlayerStage = (pinAction: () => void, isPinnedStage = false) => (
+    <MediaPlayerStage
+      videoRef={moviePlayerRef}
+      localVideoUrl={localVideoUrl}
+      screenStream={screenStream}
+      ottSession={ottSession}
+      roomId={roomId}
+      isHost={isHost}
+      isPlaying={isPlaying}
+      onFileSelect={handleFileSelect}
+      onSetVideoUrl={(url) => {
+        setLocalVideoUrl(url);
+        setIsPlaying(true);
+        meshRef.current?.broadcastPlayerSync('play', 0, url);
+      }}
+      onSetOttSession={handleSetOttSession}
+      onTriggerCountdown={triggerCountdownSync}
+      onSeek={handleSeek}
+      onStartScreenShare={startScreenShare}
+      onStopScreenShare={stopScreenShare}
+      onClearMedia={handleClearMedia}
+      onPlay={() => {
+        setIsPlaying(true);
+        const time = moviePlayerRef.current?.currentTime || ottSession?.currentTime || 0;
+        meshRef.current?.broadcastPlayerSync('play', time);
+        window.postMessage({ source: 'watchparty-sync', action: 'play', time }, '*');
+      }}
+      onPause={() => {
+        setIsPlaying(false);
+        const time = moviePlayerRef.current?.currentTime || ottSession?.currentTime || 0;
+        meshRef.current?.broadcastPlayerSync('pause', time);
+        window.postMessage({ source: 'watchparty-sync', action: 'pause', time }, '*');
+      }}
+      onPinSelf={pinAction}
+      isPinned={isPinnedStage}
+    />
+  );
 
   // Self participant model for video tile rendering
   const rawSelfName = (displayName || session?.user?.name || 'Guest')
@@ -1230,6 +1343,26 @@ export default function RoomPage() {
 
             <button
               type="button"
+              onClick={() => setIsOttModalOpen(true)}
+              className="tactile-btn tactile-btn-secondary"
+              style={{
+                padding: '0.4rem 0.75rem',
+                fontSize: '0.75rem',
+                color: '#38BDF8',
+                borderColor: 'rgba(56, 189, 248, 0.4)',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+              title="Sync Netflix, Prime Video, Disney+ or YouTube"
+            >
+              <span>🍿</span>
+              <span>Sync OTT</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setIsChatOpen(!isChatOpen)}
               className={`tactile-btn ${isChatOpen ? 'tactile-btn-primary' : 'tactile-btn-secondary'}`}
               style={{ padding: '0.4rem 0.7rem', fontSize: '0.75rem' }}
@@ -1275,27 +1408,7 @@ export default function RoomPage() {
                 position: 'relative',
               }}
             >
-              <MediaPlayerStage
-                videoRef={moviePlayerRef}
-                localVideoUrl={localVideoUrl}
-                screenStream={screenStream}
-                onFileSelect={handleFileSelect}
-                onSetVideoUrl={(url) => {
-                  setLocalVideoUrl(url);
-                  setIsPlaying(true);
-                  meshRef.current?.broadcastPlayerSync('play', 0, url);
-                }}
-                onStartScreenShare={startScreenShare}
-                onStopScreenShare={stopScreenShare}
-                onClearMedia={() => {
-                  setLocalVideoUrl(null);
-                  setScreenStream(null);
-                  setIsPlaying(false);
-                }}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onPinSelf={() => setPinnedId('self')}
-              />
+              {renderMediaPlayerStage(() => setPinnedId('self'), false)}
             </div>
           )}
 
@@ -1307,27 +1420,7 @@ export default function RoomPage() {
               <div className="layout-spotlight">
                 <div className="focal-player">
                   {!isPeerPinned || !pinnedPeer ? (
-                    <MediaPlayerStage
-                      videoRef={moviePlayerRef}
-                      localVideoUrl={localVideoUrl}
-                      screenStream={screenStream}
-                      onFileSelect={handleFileSelect}
-                      onSetVideoUrl={(url) => {
-                        setLocalVideoUrl(url);
-                        setIsPlaying(true);
-                        meshRef.current?.broadcastPlayerSync('play', 0, url);
-                      }}
-                      onStartScreenShare={startScreenShare}
-                      onStopScreenShare={stopScreenShare}
-                      onClearMedia={() => {
-                        setLocalVideoUrl(null);
-                        setScreenStream(null);
-                        setIsPlaying(false);
-                      }}
-                      onPlay={() => setIsPlaying(true)}
-                      onPause={() => setIsPlaying(false)}
-                      onPinSelf={() => setPinnedId('media-player')}
-                    />
+                    renderMediaPlayerStage(() => setPinnedId('media-player'), false)
                   ) : (
                     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                       <VideoTile
@@ -1385,7 +1478,7 @@ export default function RoomPage() {
                       className="video-tile"
                       style={{
                         width: '180px',
-                        height: '100%',
+                        height: '110px',
                         flexShrink: 0,
                         cursor: 'pointer',
                         position: 'relative',
@@ -1395,35 +1488,21 @@ export default function RoomPage() {
                       }}
                       title="Click to return movie to main stage"
                     >
-                      <MediaPlayerStage
-                        videoRef={moviePlayerRef}
-                        localVideoUrl={localVideoUrl}
-                        screenStream={screenStream}
-                        onFileSelect={handleFileSelect}
-                        onSetVideoUrl={(url) => {
-                          setLocalVideoUrl(url);
-                          setIsPlaying(true);
-                          meshRef.current?.broadcastPlayerSync('play', 0, url);
-                        }}
-                        onStartScreenShare={startScreenShare}
-                        onStopScreenShare={stopScreenShare}
-                        onClearMedia={() => {
-                          setLocalVideoUrl(null);
-                          setScreenStream(null);
-                          setIsPlaying(false);
-                        }}
-                        onPlay={() => setIsPlaying(true)}
-                        onPause={() => setIsPlaying(false)}
-                        onPinSelf={() => setPinnedId('media-player')}
-                      />
+                      {renderMediaPlayerStage(() => setPinnedId('media-player'), true)}
                       <div
                         className="tile-overlay-badge"
                         style={{
                           position: 'absolute',
                           bottom: '6px',
                           left: '6px',
-                          zIndex: 10,
-                          background: 'rgba(0, 0, 0, 0.85)',
+                          background: 'rgba(0, 0, 0, 0.75)',
+                          backdropFilter: 'blur(6px)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: '0.72rem',
+                          color: '#FFFFFF',
+                          fontWeight: 600,
+                          pointerEvents: 'none',
                         }}
                       >
                         🎬 Movie (Click to Pin)
@@ -1495,30 +1574,10 @@ export default function RoomPage() {
           {layoutMode === 'grid' && (
             <div className="layout-grid">
               <div className="video-tile" style={{ minHeight: '220px' }}>
-                <MediaPlayerStage
-                  videoRef={moviePlayerRef}
-                  localVideoUrl={localVideoUrl}
-                  screenStream={screenStream}
-                  onFileSelect={handleFileSelect}
-                  onSetVideoUrl={(url) => {
-                    setLocalVideoUrl(url);
-                    setIsPlaying(true);
-                    meshRef.current?.broadcastPlayerSync('play', 0, url);
-                  }}
-                  onStartScreenShare={startScreenShare}
-                  onStopScreenShare={stopScreenShare}
-                  onClearMedia={() => {
-                    setLocalVideoUrl(null);
-                    setScreenStream(null);
-                    setIsPlaying(false);
-                  }}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onPinSelf={() => {
-                    setPinnedId('media-player');
-                    setLayoutMode('spotlight');
-                  }}
-                />
+                {renderMediaPlayerStage(() => {
+                  setPinnedId('media-player');
+                  setLayoutMode('spotlight');
+                }, false)}
                 <div className="tile-overlay-badge">Stream Stage</div>
               </div>
               <VideoTile
@@ -1590,27 +1649,7 @@ export default function RoomPage() {
               <div className="layout-sidebar">
                 <div className="focal-player">
                   {!isPeerPinned || !pinnedPeer ? (
-                    <MediaPlayerStage
-                      videoRef={moviePlayerRef}
-                      localVideoUrl={localVideoUrl}
-                      screenStream={screenStream}
-                      onFileSelect={handleFileSelect}
-                      onSetVideoUrl={(url) => {
-                        setLocalVideoUrl(url);
-                        setIsPlaying(true);
-                        meshRef.current?.broadcastPlayerSync('play', 0, url);
-                      }}
-                      onStartScreenShare={startScreenShare}
-                      onStopScreenShare={stopScreenShare}
-                      onClearMedia={() => {
-                        setLocalVideoUrl(null);
-                        setScreenStream(null);
-                        setIsPlaying(false);
-                      }}
-                      onPlay={() => setIsPlaying(true)}
-                      onPause={() => setIsPlaying(false)}
-                      onPinSelf={() => setPinnedId('media-player')}
-                    />
+                    renderMediaPlayerStage(() => setPinnedId('media-player'), false)
                   ) : (
                     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                       <VideoTile
@@ -1673,35 +1712,21 @@ export default function RoomPage() {
                       }}
                       title="Click to return movie to main stage"
                     >
-                      <MediaPlayerStage
-                        videoRef={moviePlayerRef}
-                        localVideoUrl={localVideoUrl}
-                        screenStream={screenStream}
-                        onFileSelect={handleFileSelect}
-                        onSetVideoUrl={(url) => {
-                          setLocalVideoUrl(url);
-                          setIsPlaying(true);
-                          meshRef.current?.broadcastPlayerSync('play', 0, url);
-                        }}
-                        onStartScreenShare={startScreenShare}
-                        onStopScreenShare={stopScreenShare}
-                        onClearMedia={() => {
-                          setLocalVideoUrl(null);
-                          setScreenStream(null);
-                          setIsPlaying(false);
-                        }}
-                        onPlay={() => setIsPlaying(true)}
-                        onPause={() => setIsPlaying(false)}
-                        onPinSelf={() => setPinnedId('media-player')}
-                      />
+                      {renderMediaPlayerStage(() => setPinnedId('media-player'), true)}
                       <div
                         className="tile-overlay-badge"
                         style={{
                           position: 'absolute',
                           bottom: '6px',
                           left: '6px',
-                          zIndex: 10,
-                          background: 'rgba(0, 0, 0, 0.85)',
+                          background: 'rgba(0, 0, 0, 0.75)',
+                          backdropFilter: 'blur(6px)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: '0.72rem',
+                          color: '#FFFFFF',
+                          fontWeight: 600,
+                          pointerEvents: 'none',
                         }}
                       >
                         🎬 Movie (Click to Pin)
@@ -1786,12 +1811,14 @@ export default function RoomPage() {
           isPlaying={isPlaying}
           isFullscreen={isFullscreen}
           isScreenSharing={Boolean(screenStream)}
+          isOttActive={Boolean(ottSession)}
           layoutMode={layoutMode}
           onCycleLayoutMode={cycleLayoutMode}
           onToggleMic={toggleMic}
           onToggleCam={toggleCam}
           onSendReaction={sendReaction}
           onTogglePlayPause={togglePlayPause}
+          onOpenOttModal={() => setIsOttModalOpen(true)}
           onToggleFullscreen={toggleFullscreen}
           onToggleScreenShare={screenStream ? stopScreenShare : startScreenShare}
           onLeaveRoom={() => setStage('left')}
@@ -1817,6 +1844,15 @@ export default function RoomPage() {
         isOpen={isShareModalOpen}
         roomId={roomId}
         onClose={() => setIsShareModalOpen(false)}
+      />
+
+      {/* Sync OTT Watch Party Modal */}
+      <OttSyncModal
+        isOpen={isOttModalOpen}
+        onClose={() => setIsOttModalOpen(false)}
+        onSelectOtt={handleSetOttSession}
+        onStartLegacyScreenShare={startScreenShare}
+        currentSession={ottSession}
       />
 
       {/* Mandatory Guest Name Entry Modal */}
