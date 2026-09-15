@@ -99,6 +99,9 @@ export default function LandingPage() {
       }
 
       // Immediately navigate host directly into the room with share=true to show share popup
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(`wp_host_${data.roomId}`, 'true');
+      }
       router.push(`/room/${encodeURIComponent(data.roomId)}?share=true`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error creating room';
@@ -126,7 +129,10 @@ export default function LandingPage() {
 
     const cleanName = guestDisplayName.trim() || 'Guest';
     // Store chosen display name in session storage so room picks it up automatically
-    sessionStorage.setItem(`wp_name_${cleanRoom}`, cleanName);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(`wp_name_${cleanRoom}`, cleanName);
+      sessionStorage.removeItem(`wp_host_${cleanRoom}`);
+    }
 
     router.push(`/room/${cleanRoom}`);
   };

@@ -277,7 +277,7 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
 
           {/* Primary Action Buttons */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
-            {/* 1. Sync OTT (Netflix, Prime, YouTube) */}
+            {/* 1. Choose Movie to Sync */}
             <button
               type="button"
               onClick={() => setShowOttModal(true)}
@@ -294,7 +294,7 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
               }}
             >
               <span>🍿</span>
-              <span>Sync OTT Watch Party</span>
+              <span>Choose Movie to Sync</span>
             </button>
 
             {/* 2. Local File */}

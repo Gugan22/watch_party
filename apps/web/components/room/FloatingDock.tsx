@@ -10,6 +10,7 @@ interface FloatingDockProps {
   isScreenSharing?: boolean;
   layoutMode?: 'theater' | 'spotlight' | 'grid' | 'sidebar';
   isOttActive?: boolean;
+  isHost?: boolean;
   onToggleMic: () => void;
   onToggleCam: () => void;
   onSendReaction: (emoji: string) => void;
@@ -17,6 +18,7 @@ interface FloatingDockProps {
   onToggleFullscreen: () => void;
   onToggleScreenShare?: () => void;
   onOpenOttModal?: () => void;
+  onSyncAll?: () => void;
   onCycleLayoutMode?: () => void;
   onLeaveRoom: () => void;
 }
@@ -31,6 +33,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   isScreenSharing = false,
   layoutMode = 'spotlight',
   isOttActive = false,
+  isHost = false,
   onToggleMic,
   onToggleCam,
   onSendReaction,
@@ -38,6 +41,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   onToggleFullscreen,
   onToggleScreenShare,
   onOpenOttModal,
+  onSyncAll,
   onCycleLayoutMode,
   onLeaveRoom,
 }) => {
@@ -101,15 +105,15 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
           {isPlaying ? '⏸️' : '▶️'}
         </button>
 
-        {/* OTT Watch Party Selector Button */}
-        {onOpenOttModal && (
+        {/* Host Playback Sync Button (Host Only) */}
+        {isHost && onSyncAll && (
           <button
-            onClick={onOpenOttModal}
-            className={`dock-btn ${isOttActive ? 'active' : ''}`}
-            title="Sync OTT Watch Party (Netflix, Prime, Disney+, YouTube)"
-            style={isOttActive ? { borderColor: 'var(--accent-blue)', color: '#38BDF8' } : {}}
+            onClick={onSyncAll}
+            className="dock-btn active"
+            title="Sync: Play for all attendees across the room"
+            style={{ borderColor: 'var(--accent-blue)', color: '#38BDF8', fontWeight: 700 }}
           >
-            🍿
+            ⚡
           </button>
         )}
 

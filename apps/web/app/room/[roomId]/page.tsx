@@ -61,8 +61,12 @@ export default function RoomPage() {
 
   const roomId = (params?.roomId as string) || 'watch-room';
 
-  // Check if current user is an authenticated host (via session or verified token)
-  const [serverIsHost, setServerIsHost] = useState(false);
+  // Check if current user is an authenticated host (via session or verified token or room creator storage)
+  const [serverIsHost, setServerIsHost] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('host') === 'true' || sessionStorage.getItem(`wp_host_${roomId}`) === 'true';
+  });
   const isHost = Boolean(session?.user?.email) || serverIsHost;
 
   // Share party link popup modal (auto-triggered on ?share=true or host manual click)
@@ -76,10 +80,13 @@ export default function RoomPage() {
   const [receivedPing, setReceivedPing] = useState<ReceivedPing | null>(null);
   const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string | null>(null);
 
-  // Check URL query parameters for ?share=true
+  // Check URL query parameters for ?share=true and ?host=true
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('host') === 'true' || sessionStorage.getItem(`wp_host_${roomId}`) === 'true') {
+        setServerIsHost(true);
+      }
       if (urlParams.get('share') === 'true') {
         setIsShareModalOpen(true);
         // Clean up '?share=true' from the browser address bar without reload
@@ -87,7 +94,7 @@ export default function RoomPage() {
         window.history.replaceState({}, '', cleanUrl);
       }
     }
-  }, []);
+  }, [roomId]);
 
   // Room lifecycle stage: 'connecting' | 'live' | 'left'
   const [stage, setStage] = useState<'connecting' | 'live' | 'left'>('connecting');
@@ -145,6 +152,7 @@ export default function RoomPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [ottSession, setOttSession] = useState<OttSession | null>(null);
   const [isOttModalOpen, setIsOttModalOpen] = useState(false);
+  const [syncToastMsg, setSyncToastMsg] = useState<string | null>(null);
   const ottSessionRef = useRef<OttSession | null>(null);
   ottSessionRef.current = ottSession;
 
@@ -974,6 +982,48 @@ export default function RoomPage() {
     window.postMessage({ source: 'watchparty-sync', action: 'seek', time }, '*');
   };
 
+  // Host-Only Room Playback Sync: forces playback for all attendees across the room in their systems
+  const handleHostSyncAll = () => {
+    if (!isHost) return;
+
+    // If no media loaded yet, open the modal so host can choose a movie/stream to sync
+    if (!localVideoUrl && !ottSession && !screenStream) {
+      setIsOttModalOpen(true);
+      return;
+    }
+
+    const currentTime = moviePlayerRef.current?.currentTime || ottSession?.currentTime || 0;
+
+    // 1. Force local state to playing
+    setIsPlaying(true);
+    if (moviePlayerRef.current) {
+      moviePlayerRef.current.currentTime = currentTime;
+      moviePlayerRef.current.play().catch(() => {});
+    }
+    if (ottSession) {
+      const updated = { ...ottSession, isPlaying: true, currentTime, lastUpdated: Date.now() };
+      setOttSession(updated);
+      meshRef.current?.broadcastOttSession(updated);
+    }
+
+    // 2. Broadcast 'play' command to all attendees with exact timestamp and media URL
+    const activeUrl = localVideoUrl || ottSession?.url || undefined;
+    meshRef.current?.broadcastPlayerSync('play', currentTime, activeUrl);
+
+    // 3. Relay to local browser extensions/bookmarklets
+    if (typeof window !== 'undefined') {
+      window.postMessage({ source: 'watchparty-sync', action: 'play', time: currentTime, url: activeUrl }, '*');
+    }
+
+    // 4. Show a visual feedback toast
+    const attendeeCount = participants.length;
+    const targetMsg = attendeeCount > 0
+      ? `⚡ Synced & Playing for all ${attendeeCount + 1} attendees!`
+      : `⚡ Synced & Playing across party!`;
+    setSyncToastMsg(targetMsg);
+    setTimeout(() => setSyncToastMsg(null), 2800);
+  };
+
   // Play/Pause Video & OTT Sync
   const togglePlayPause = () => {
     const nextPlaying = !isPlaying;
@@ -1341,25 +1391,28 @@ export default function RoomPage() {
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsOttModalOpen(true)}
-              className="tactile-btn tactile-btn-secondary"
-              style={{
-                padding: '0.4rem 0.75rem',
-                fontSize: '0.75rem',
-                color: '#38BDF8',
-                borderColor: 'rgba(56, 189, 248, 0.4)',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-              title="Sync Netflix, Prime Video, Disney+ or YouTube"
-            >
-              <span>🍿</span>
-              <span>Sync OTT</span>
-            </button>
+            {/* Host-Only Playback Sync Button */}
+            {isHost && (
+              <button
+                type="button"
+                onClick={handleHostSyncAll}
+                className="tactile-btn tactile-btn-primary"
+                style={{
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)',
+                }}
+                title="Sync: Play for all attendees across the room"
+              >
+                <span>⚡</span>
+                <span>Sync</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -1802,6 +1855,36 @@ export default function RoomPage() {
 
           {/* Countdown Modal */}
           <CountdownModal countdownNum={countdownNum} />
+
+          {/* Real-Time Sync Toast Notification */}
+          {syncToastMsg && (
+            <div
+              className="animate-fade-in"
+              style={{
+                position: 'fixed',
+                top: '72px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 150,
+                background: 'rgba(11, 13, 17, 0.94)',
+                backdropFilter: 'blur(12px)',
+                color: '#38BDF8',
+                padding: '8px 20px',
+                borderRadius: 'var(--radius-full)',
+                border: '1px solid rgba(56, 189, 248, 0.4)',
+                boxShadow: '0 8px 30px rgba(0, 0, 0, 0.6)',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                pointerEvents: 'none',
+              }}
+            >
+              <span>⚡</span>
+              <span>{syncToastMsg}</span>
+            </div>
+          )}
         </div>
 
         {/* Floating Bottom Tactile Dock */}
@@ -1812,13 +1895,14 @@ export default function RoomPage() {
           isFullscreen={isFullscreen}
           isScreenSharing={Boolean(screenStream)}
           isOttActive={Boolean(ottSession)}
+          isHost={isHost}
           layoutMode={layoutMode}
           onCycleLayoutMode={cycleLayoutMode}
           onToggleMic={toggleMic}
           onToggleCam={toggleCam}
           onSendReaction={sendReaction}
           onTogglePlayPause={togglePlayPause}
-          onOpenOttModal={() => setIsOttModalOpen(true)}
+          onSyncAll={handleHostSyncAll}
           onToggleFullscreen={toggleFullscreen}
           onToggleScreenShare={screenStream ? stopScreenShare : startScreenShare}
           onLeaveRoom={() => setStage('left')}
