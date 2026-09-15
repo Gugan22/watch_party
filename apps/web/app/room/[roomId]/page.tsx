@@ -563,6 +563,20 @@ export default function RoomPage() {
   }, []);
   const handleOpenPingModal = handleOpenDirectChat;
 
+  // Toggle Pin participant or switch back to media-player
+  const handleTogglePin = useCallback((id: string) => {
+    setPinnedId((prev) => (prev === id ? 'media-player' : id));
+  }, []);
+
+  // If pinned remote participant leaves, revert back to media player
+  useEffect(() => {
+    if (pinnedId !== 'media-player' && pinnedId !== 'self') {
+      if (!participants.some((p) => p.id === pinnedId)) {
+        setPinnedId('media-player');
+      }
+    }
+  }, [participants, pinnedId]);
+
   // Send private ping
   const handleSendPrivatePing = useCallback((targetId: string, message: string) => {
     const target = participants.find((p) => p.id === targetId);
@@ -1285,105 +1299,198 @@ export default function RoomPage() {
             </div>
           )}
 
-          {layoutMode === 'spotlight' && (
-            <div className="layout-spotlight">
-              <div className="focal-player">
-                {pinnedId === 'media-player' ? (
-                  <MediaPlayerStage
-                    videoRef={moviePlayerRef}
-                    localVideoUrl={localVideoUrl}
-                    screenStream={screenStream}
-                    onFileSelect={handleFileSelect}
-                    onSetVideoUrl={(url) => {
-                      setLocalVideoUrl(url);
-                      setIsPlaying(true);
-                      meshRef.current?.broadcastPlayerSync('play', 0, url);
-                    }}
-                    onStartScreenShare={startScreenShare}
-                    onStopScreenShare={stopScreenShare}
-                    onClearMedia={() => {
-                      setLocalVideoUrl(null);
-                      setScreenStream(null);
-                      setIsPlaying(false);
-                    }}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onPinSelf={() => setPinnedId('self')}
-                  />
-                ) : (
-                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                    <p>Participant pinned to focal stage</p>
-                    <button
-                      type="button"
-                      onClick={() => setPinnedId('media-player')}
-                      className="tile-pin-btn"
-                      style={{ opacity: 0.9, top: '12px', right: '12px' }}
-                    >
-                      📌 Switch to Media Player
-                    </button>
-                  </div>
-                )}
-              </div>
+          {layoutMode === 'spotlight' && (() => {
+            const pinnedPeer = pinnedId === 'self' ? selfParticipant : participants.find((p) => p.id === pinnedId);
+            const isPeerPinned = pinnedId !== 'media-player' && Boolean(pinnedPeer);
 
-              {/* Horizontal Participant Strip */}
-              <div className="participant-strip">
-                <VideoTile
-                  participant={selfParticipant}
-                  stream={localStream}
-                  isSelf
-                  onRequestMedia={requestMedia}
-                  onPin={setPinnedId}
-                  style={{ width: '160px', height: '100%', flexShrink: 0 }}
-                />
-                {participants.length === 0 ? (
-                  <div
-                    onClick={() => setIsShareModalOpen(true)}
-                    style={{
-                      width: '160px',
-                      height: '100%',
-                      flexShrink: 0,
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px dashed var(--border-medium)',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '4px',
-                      cursor: 'pointer',
-                      padding: '0.75rem',
-                      textAlign: 'center',
-                      transition: 'all 0.15s ease',
-                    }}
-                    title="Click to invite friends to join"
-                  >
-                    <span style={{ fontSize: '1.4rem' }}>👥</span>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                      Waiting for guests
-                    </span>
-                    <span style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', fontWeight: 700 }}>
-                      + Invite Friends
-                    </span>
-                  </div>
-                ) : (
-                  participants.map((p) => (
-                    <VideoTile
-                      key={p.id}
-                      participant={p}
-                      stream={p.stream}
-                      isHostViewer={isHost}
-                      isMutedForHost={hostMutedIds.has(p.id)}
-                      onPin={setPinnedId}
-                      onKick={handleKickParticipant}
-                      onToggleHostMute={handleToggleHostMute}
-                      onPing={handleOpenPingModal}
-                      style={{ width: '160px', height: '100%', flexShrink: 0 }}
+            return (
+              <div className="layout-spotlight">
+                <div className="focal-player">
+                  {!isPeerPinned || !pinnedPeer ? (
+                    <MediaPlayerStage
+                      videoRef={moviePlayerRef}
+                      localVideoUrl={localVideoUrl}
+                      screenStream={screenStream}
+                      onFileSelect={handleFileSelect}
+                      onSetVideoUrl={(url) => {
+                        setLocalVideoUrl(url);
+                        setIsPlaying(true);
+                        meshRef.current?.broadcastPlayerSync('play', 0, url);
+                      }}
+                      onStartScreenShare={startScreenShare}
+                      onStopScreenShare={stopScreenShare}
+                      onClearMedia={() => {
+                        setLocalVideoUrl(null);
+                        setScreenStream(null);
+                        setIsPlaying(false);
+                      }}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onPinSelf={() => setPinnedId('media-player')}
                     />
-                  ))
-                )}
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                      <VideoTile
+                        participant={pinnedPeer}
+                        stream={pinnedId === 'self' ? localStream : pinnedPeer.stream}
+                        isSelf={pinnedId === 'self'}
+                        isHostViewer={isHost}
+                        isMutedForHost={pinnedId !== 'self' ? hostMutedIds.has(pinnedPeer.id) : false}
+                        isPinned={true}
+                        onRequestMedia={requestMedia}
+                        onPin={() => setPinnedId('media-player')}
+                        onKick={handleKickParticipant}
+                        onToggleHostMute={handleToggleHostMute}
+                        onPing={handleOpenDirectChat}
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                      {/* Floating Unpin button to return movie to focal area */}
+                      <button
+                        type="button"
+                        onClick={() => setPinnedId('media-player')}
+                        style={{
+                          position: 'absolute',
+                          top: '12px',
+                          right: '12px',
+                          zIndex: 20,
+                          background: 'rgba(0, 0, 0, 0.75)',
+                          backdropFilter: 'blur(8px)',
+                          border: '1px solid rgba(255, 255, 255, 0.25)',
+                          borderRadius: 'var(--radius-full)',
+                          color: '#FFFFFF',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          padding: '4px 12px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                        }}
+                        title="Unpin participant and return movie to focal stage"
+                      >
+                        <span>📌</span>
+                        <span>Unpin (Show Movie)</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Horizontal Participant Strip */}
+                <div className="participant-strip">
+                  {/* When a participant is pinned, show the Movie Player thumbnail in the strip */}
+                  {isPeerPinned && (
+                    <div
+                      onClick={() => setPinnedId('media-player')}
+                      className="video-tile"
+                      style={{
+                        width: '180px',
+                        height: '100%',
+                        flexShrink: 0,
+                        cursor: 'pointer',
+                        position: 'relative',
+                        border: '2px solid var(--accent-blue)',
+                        borderRadius: 'var(--radius-md)',
+                        overflow: 'hidden',
+                      }}
+                      title="Click to return movie to main stage"
+                    >
+                      <MediaPlayerStage
+                        videoRef={moviePlayerRef}
+                        localVideoUrl={localVideoUrl}
+                        screenStream={screenStream}
+                        onFileSelect={handleFileSelect}
+                        onSetVideoUrl={(url) => {
+                          setLocalVideoUrl(url);
+                          setIsPlaying(true);
+                          meshRef.current?.broadcastPlayerSync('play', 0, url);
+                        }}
+                        onStartScreenShare={startScreenShare}
+                        onStopScreenShare={stopScreenShare}
+                        onClearMedia={() => {
+                          setLocalVideoUrl(null);
+                          setScreenStream(null);
+                          setIsPlaying(false);
+                        }}
+                        onPlay={() => setIsPlaying(true)}
+                        onPause={() => setIsPlaying(false)}
+                        onPinSelf={() => setPinnedId('media-player')}
+                      />
+                      <div
+                        className="tile-overlay-badge"
+                        style={{
+                          position: 'absolute',
+                          bottom: '6px',
+                          left: '6px',
+                          zIndex: 10,
+                          background: 'rgba(0, 0, 0, 0.85)',
+                        }}
+                      >
+                        🎬 Movie (Click to Pin)
+                      </div>
+                    </div>
+                  )}
+
+                  <VideoTile
+                    participant={selfParticipant}
+                    stream={localStream}
+                    isSelf
+                    isPinned={pinnedId === 'self'}
+                    onRequestMedia={requestMedia}
+                    onPin={handleTogglePin}
+                    style={{ width: '160px', height: '100%', flexShrink: 0 }}
+                  />
+                  {participants.length === 0 ? (
+                    <div
+                      onClick={() => setIsShareModalOpen(true)}
+                      style={{
+                        width: '160px',
+                        height: '100%',
+                        flexShrink: 0,
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px dashed var(--border-medium)',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        cursor: 'pointer',
+                        padding: '0.75rem',
+                        textAlign: 'center',
+                        transition: 'all 0.15s ease',
+                      }}
+                      title="Click to invite friends to join"
+                    >
+                      <span style={{ fontSize: '1.4rem' }}>👥</span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        Waiting for guests
+                      </span>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--accent-blue)', fontWeight: 700 }}>
+                        + Invite Friends
+                      </span>
+                    </div>
+                  ) : (
+                    participants.map((p) => (
+                      <VideoTile
+                        key={p.id}
+                        participant={p}
+                        stream={p.stream}
+                        isHostViewer={isHost}
+                        isMutedForHost={hostMutedIds.has(p.id)}
+                        isPinned={pinnedId === p.id}
+                        onPin={handleTogglePin}
+                        onKick={handleKickParticipant}
+                        onToggleHostMute={handleToggleHostMute}
+                        onPing={handleOpenDirectChat}
+                        style={{ width: '160px', height: '100%', flexShrink: 0 }}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {layoutMode === 'grid' && (
             <div className="layout-grid">
@@ -1407,7 +1514,10 @@ export default function RoomPage() {
                   }}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
-                  onPinSelf={() => setPinnedId('self')}
+                  onPinSelf={() => {
+                    setPinnedId('media-player');
+                    setLayoutMode('spotlight');
+                  }}
                 />
                 <div className="tile-overlay-badge">Stream Stage</div>
               </div>
@@ -1415,7 +1525,12 @@ export default function RoomPage() {
                 participant={selfParticipant}
                 stream={localStream}
                 isSelf
+                isPinned={pinnedId === 'self'}
                 onRequestMedia={requestMedia}
+                onPin={(id) => {
+                  handleTogglePin(id);
+                  setLayoutMode('spotlight');
+                }}
                 style={{ minHeight: '220px' }}
               />
               {participants.length === 0 ? (
@@ -1452,9 +1567,14 @@ export default function RoomPage() {
                     stream={p.stream}
                     isHostViewer={isHost}
                     isMutedForHost={hostMutedIds.has(p.id)}
+                    isPinned={pinnedId === p.id}
+                    onPin={(id) => {
+                      handleTogglePin(id);
+                      setLayoutMode('spotlight');
+                    }}
                     onKick={handleKickParticipant}
                     onToggleHostMute={handleToggleHostMute}
-                    onPing={handleOpenPingModal}
+                    onPing={handleOpenDirectChat}
                     style={{ minHeight: '220px' }}
                   />
                 ))
@@ -1462,79 +1582,185 @@ export default function RoomPage() {
             </div>
           )}
 
-          {layoutMode === 'sidebar' && (
-            <div className="layout-sidebar">
-              <div className="focal-player">
-                <MediaPlayerStage
-                  videoRef={moviePlayerRef}
-                  localVideoUrl={localVideoUrl}
-                  screenStream={screenStream}
-                  onFileSelect={handleFileSelect}
-                  onSetVideoUrl={(url) => {
-                    setLocalVideoUrl(url);
-                    setIsPlaying(true);
-                    meshRef.current?.broadcastPlayerSync('play', 0, url);
-                  }}
-                  onStartScreenShare={startScreenShare}
-                  onStopScreenShare={stopScreenShare}
-                  onClearMedia={() => {
-                    setLocalVideoUrl(null);
-                    setScreenStream(null);
-                    setIsPlaying(false);
-                  }}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onPinSelf={() => setPinnedId('self')}
-                />
-              </div>
-              <div className="sidebar-participants">
-                <VideoTile
-                  participant={selfParticipant}
-                  stream={localStream}
-                  isSelf
-                  onRequestMedia={requestMedia}
-                  style={{ height: '140px' }}
-                />
-                {participants.length === 0 ? (
-                  <div
-                    onClick={() => setIsShareModalOpen(true)}
-                    style={{
-                      height: '140px',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px dashed var(--border-medium)',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '4px',
-                      cursor: 'pointer',
-                      padding: '0.75rem',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <span style={{ fontSize: '1.2rem' }}>👥</span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Waiting for guests</span>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--accent-blue)', fontWeight: 700 }}>+ Share Link</span>
-                  </div>
-                ) : (
-                  participants.map((p) => (
-                    <VideoTile
-                      key={p.id}
-                      participant={p}
-                      stream={p.stream}
-                      isHostViewer={isHost}
-                      isMutedForHost={hostMutedIds.has(p.id)}
-                      onKick={handleKickParticipant}
-                      onToggleHostMute={handleToggleHostMute}
-                      onPing={handleOpenPingModal}
-                      style={{ height: '140px' }}
+          {layoutMode === 'sidebar' && (() => {
+            const pinnedPeer = pinnedId === 'self' ? selfParticipant : participants.find((p) => p.id === pinnedId);
+            const isPeerPinned = pinnedId !== 'media-player' && Boolean(pinnedPeer);
+
+            return (
+              <div className="layout-sidebar">
+                <div className="focal-player">
+                  {!isPeerPinned || !pinnedPeer ? (
+                    <MediaPlayerStage
+                      videoRef={moviePlayerRef}
+                      localVideoUrl={localVideoUrl}
+                      screenStream={screenStream}
+                      onFileSelect={handleFileSelect}
+                      onSetVideoUrl={(url) => {
+                        setLocalVideoUrl(url);
+                        setIsPlaying(true);
+                        meshRef.current?.broadcastPlayerSync('play', 0, url);
+                      }}
+                      onStartScreenShare={startScreenShare}
+                      onStopScreenShare={stopScreenShare}
+                      onClearMedia={() => {
+                        setLocalVideoUrl(null);
+                        setScreenStream(null);
+                        setIsPlaying(false);
+                      }}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onPinSelf={() => setPinnedId('media-player')}
                     />
-                  ))
-                )}
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                      <VideoTile
+                        participant={pinnedPeer}
+                        stream={pinnedId === 'self' ? localStream : pinnedPeer.stream}
+                        isSelf={pinnedId === 'self'}
+                        isHostViewer={isHost}
+                        isMutedForHost={pinnedId !== 'self' ? hostMutedIds.has(pinnedPeer.id) : false}
+                        isPinned={true}
+                        onRequestMedia={requestMedia}
+                        onPin={() => setPinnedId('media-player')}
+                        onKick={handleKickParticipant}
+                        onToggleHostMute={handleToggleHostMute}
+                        onPing={handleOpenDirectChat}
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPinnedId('media-player')}
+                        style={{
+                          position: 'absolute',
+                          top: '12px',
+                          right: '12px',
+                          zIndex: 20,
+                          background: 'rgba(0, 0, 0, 0.75)',
+                          backdropFilter: 'blur(8px)',
+                          border: '1px solid rgba(255, 255, 255, 0.25)',
+                          borderRadius: 'var(--radius-full)',
+                          color: '#FFFFFF',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          padding: '4px 12px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                        }}
+                        title="Unpin participant and return movie to focal stage"
+                      >
+                        <span>📌</span>
+                        <span>Unpin (Show Movie)</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="sidebar-participants">
+                  {/* When a participant is pinned, show the Movie Player thumbnail in the sidebar */}
+                  {isPeerPinned && (
+                    <div
+                      onClick={() => setPinnedId('media-player')}
+                      className="video-tile"
+                      style={{
+                        height: '140px',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        border: '2px solid var(--accent-blue)',
+                        borderRadius: 'var(--radius-md)',
+                        overflow: 'hidden',
+                      }}
+                      title="Click to return movie to main stage"
+                    >
+                      <MediaPlayerStage
+                        videoRef={moviePlayerRef}
+                        localVideoUrl={localVideoUrl}
+                        screenStream={screenStream}
+                        onFileSelect={handleFileSelect}
+                        onSetVideoUrl={(url) => {
+                          setLocalVideoUrl(url);
+                          setIsPlaying(true);
+                          meshRef.current?.broadcastPlayerSync('play', 0, url);
+                        }}
+                        onStartScreenShare={startScreenShare}
+                        onStopScreenShare={stopScreenShare}
+                        onClearMedia={() => {
+                          setLocalVideoUrl(null);
+                          setScreenStream(null);
+                          setIsPlaying(false);
+                        }}
+                        onPlay={() => setIsPlaying(true)}
+                        onPause={() => setIsPlaying(false)}
+                        onPinSelf={() => setPinnedId('media-player')}
+                      />
+                      <div
+                        className="tile-overlay-badge"
+                        style={{
+                          position: 'absolute',
+                          bottom: '6px',
+                          left: '6px',
+                          zIndex: 10,
+                          background: 'rgba(0, 0, 0, 0.85)',
+                        }}
+                      >
+                        🎬 Movie (Click to Pin)
+                      </div>
+                    </div>
+                  )}
+
+                  <VideoTile
+                    participant={selfParticipant}
+                    stream={localStream}
+                    isSelf
+                    isPinned={pinnedId === 'self'}
+                    onRequestMedia={requestMedia}
+                    onPin={handleTogglePin}
+                    style={{ height: '140px' }}
+                  />
+                  {participants.length === 0 ? (
+                    <div
+                      onClick={() => setIsShareModalOpen(true)}
+                      style={{
+                        height: '140px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px dashed var(--border-medium)',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        cursor: 'pointer',
+                        padding: '0.75rem',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <span style={{ fontSize: '1.2rem' }}>👥</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Waiting for guests</span>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--accent-blue)', fontWeight: 700 }}>+ Share Link</span>
+                    </div>
+                  ) : (
+                    participants.map((p) => (
+                      <VideoTile
+                        key={p.id}
+                        participant={p}
+                        stream={p.stream}
+                        isHostViewer={isHost}
+                        isMutedForHost={hostMutedIds.has(p.id)}
+                        isPinned={pinnedId === p.id}
+                        onPin={handleTogglePin}
+                        onKick={handleKickParticipant}
+                        onToggleHostMute={handleToggleHostMute}
+                        onPing={handleOpenDirectChat}
+                        style={{ height: '140px' }}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Floating Reactions PiP */}
           {showReactionPiP && activeReactions.length > 0 && (

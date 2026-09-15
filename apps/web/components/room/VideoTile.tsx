@@ -17,6 +17,7 @@ interface VideoTileProps {
   isSelf?: boolean;
   isHostViewer?: boolean;
   isMutedForHost?: boolean;
+  isPinned?: boolean;
   onPin?: (id: string) => void;
   onKick?: (id: string) => void;
   onToggleHostMute?: (id: string) => void;
@@ -31,6 +32,7 @@ export const VideoTile: React.FC<VideoTileProps> = ({
   isSelf = false,
   isHostViewer = false,
   isMutedForHost = false,
+  isPinned = false,
   onPin,
   onKick,
   onToggleHostMute,
@@ -220,6 +222,11 @@ export const VideoTile: React.FC<VideoTileProps> = ({
         >
           {displayNameShort}
         </span>
+        {isPinned && (
+          <span style={{ color: 'var(--accent-blue)', fontWeight: 700, marginLeft: '3px' }}>
+            [Pinned]
+          </span>
+        )}
         {!participant.isMicOn && <span title="Muted by user">🔇</span>}
         {isMutedForHost && <span title="Muted for you" style={{ color: 'var(--warning-amber)' }}>[Muted]</span>}
       </div>
@@ -229,8 +236,14 @@ export const VideoTile: React.FC<VideoTileProps> = ({
         <button
           type="button"
           onClick={() => onPin(participant.id)}
-          className="tile-pin-btn"
-          title={`Pin ${participant.name} to focal stage`}
+          className={`tile-pin-btn ${isPinned ? 'pinned' : ''}`}
+          style={{
+            background: isPinned ? 'var(--accent-blue)' : undefined,
+            color: isPinned ? '#FFFFFF' : undefined,
+            boxShadow: isPinned ? '0 0 10px rgba(59, 130, 246, 0.6)' : undefined,
+            border: isPinned ? '1px solid #60A5FA' : undefined,
+          }}
+          title={isPinned ? `Unpin ${participant.name} (Return to Movie)` : `Pin ${participant.name} to focal stage`}
         >
           📌
         </button>
