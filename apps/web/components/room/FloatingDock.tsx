@@ -11,6 +11,8 @@ interface FloatingDockProps {
   layoutMode?: 'theater' | 'spotlight' | 'grid' | 'sidebar';
   isOttActive?: boolean;
   isHost?: boolean;
+  isPipActive?: boolean;
+  onTogglePip?: () => void;
   onToggleMic: () => void;
   onToggleCam: () => void;
   onSendReaction: (emoji: string) => void;
@@ -197,6 +199,8 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   isScreenSharing = false,
   layoutMode = 'spotlight',
   isHost = false,
+  isPipActive = false,
+  onTogglePip,
   onToggleMic,
   onToggleCam,
   onSendReaction,
@@ -532,6 +536,26 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
             title={`Current View: ${layoutMode || 'spotlight'}. Click to switch view mode.`}
           >
             {layoutMode === 'theater' ? '🎬' : layoutMode === 'spotlight' ? '🎯' : layoutMode === 'grid' ? '⊞' : '◫'}
+          </button>
+        )}
+
+        {/* Floating Webcams PiP Button (Always-On-Top OS Window for Netflix / Prime / OTT) */}
+        {onTogglePip && (
+          <button
+            onClick={onTogglePip}
+            className={`dock-btn ${isPipActive ? 'active' : ''}`}
+            title={
+              isPipActive
+                ? 'Close Floating Webcams (PiP)'
+                : '📌 Pop Out Webcams (Always-On-Top Floating Window for Netflix, Prime, Hotstar & Crunchyroll)'
+            }
+            style={
+              isPipActive
+                ? { borderColor: 'var(--accent-purple)', color: '#C084FC', background: 'rgba(168, 85, 247, 0.2)' }
+                : {}
+            }
+          >
+            📌
           </button>
         )}
 

@@ -17,6 +17,8 @@ interface OttSynchronizerStageProps {
   onClearMedia: () => void;
   onPinStage?: () => void;
   isPinned?: boolean;
+  isPipActive?: boolean;
+  onTogglePip?: () => void;
 }
 
 const PLATFORM_THEMES: Record<string, { name: string; bg: string; accent: string; icon: string }> = {
@@ -64,6 +66,8 @@ export const OttSynchronizerStage: React.FC<OttSynchronizerStageProps> = ({
   onClearMedia,
   onPinStage,
   isPinned,
+  isPipActive = false,
+  onTogglePip,
 }) => {
   const [localTime, setLocalTime] = useState(session.currentTime || 0);
   const [showExtensionModal, setShowExtensionModal] = useState(false);
@@ -229,8 +233,8 @@ export const OttSynchronizerStage: React.FC<OttSynchronizerStageProps> = ({
           Click below to open the movie, then control playback synchronously!
         </p>
 
-        {/* Big Launch Button */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '1.75rem' }}>
+        {/* Big Launch & Pop Out Buttons */}
+        <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '1.75rem' }}>
           <button
             type="button"
             onClick={handleLaunchOtt}
@@ -251,6 +255,30 @@ export const OttSynchronizerStage: React.FC<OttSynchronizerStageProps> = ({
             <span>Launch on {theme.name}</span>
             <span style={{ fontSize: '0.8rem', opacity: 0.85 }}>↗</span>
           </button>
+
+          {onTogglePip && (
+            <button
+              type="button"
+              onClick={onTogglePip}
+              className="tactile-btn tactile-btn-secondary"
+              style={{
+                padding: '0.85rem 1.4rem',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderColor: isPipActive ? '#A855F7' : 'rgba(255, 255, 255, 0.2)',
+                background: isPipActive ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                color: isPipActive ? '#E9D5FF' : '#FFFFFF',
+                boxShadow: isPipActive ? '0 0 15px rgba(168, 85, 247, 0.4)' : 'none',
+              }}
+              title="Pop out friends' webcams into an always-on-top window to watch Netflix/Prime in full screen"
+            >
+              <span>📌</span>
+              <span>{isPipActive ? 'Close Floating Webcams' : 'Pop Out Webcams (PiP)'}</span>
+            </button>
+          )}
         </div>
 
         {/* Master Synced Remote Controller */}

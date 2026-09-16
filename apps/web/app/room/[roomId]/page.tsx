@@ -11,6 +11,7 @@ import { LobbyView } from '@/components/room/LobbyView';
 import { VideoTile, type Participant } from '@/components/room/VideoTile';
 import { MediaPlayerStage } from '@/components/room/MediaPlayerStage';
 import { FloatingDock } from '@/components/room/FloatingDock';
+import { FloatingWebcamsPiP } from '@/components/room/FloatingWebcamsPiP';
 import { ChatDrawer } from '@/components/room/ChatDrawer';
 import { CountdownModal } from '@/components/room/CountdownModal';
 import { PostCallView } from '@/components/room/PostCallView';
@@ -129,6 +130,7 @@ export default function RoomPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isTopBarHovered, setIsTopBarHovered] = useState(false);
   const [showReactionPiP, setShowReactionPiP] = useState(true);
+  const [isPipActive, setIsPipActive] = useState(false);
   const [countdownNum, setCountdownNum] = useState<number | null>(null);
 
   // Host moderation: IDs of participants muted locally by host
@@ -1096,6 +1098,8 @@ export default function RoomPage() {
       }}
       onPinSelf={pinAction}
       isPinned={isPinnedStage}
+      isPipActive={isPipActive}
+      onTogglePip={() => setIsPipActive((prev) => !prev)}
     />
   );
 
@@ -1856,6 +1860,8 @@ export default function RoomPage() {
           isScreenSharing={Boolean(screenStream)}
           isOttActive={Boolean(ottSession)}
           isHost={isHost}
+          isPipActive={isPipActive}
+          onTogglePip={() => setIsPipActive((prev) => !prev)}
           layoutMode={layoutMode}
           onCycleLayoutMode={cycleLayoutMode}
           onToggleMic={toggleMic}
@@ -1918,6 +1924,20 @@ export default function RoomPage() {
         ping={receivedPing}
         onPingBack={(fromId, fromName) => handleOpenPingModal(fromId, fromName)}
         onDismiss={() => setReceivedPing(null)}
+      />
+
+      {/* Always-On-Top Floating Webcams Window (Document Picture-in-Picture) */}
+      <FloatingWebcamsPiP
+        isActive={isPipActive}
+        onClose={() => setIsPipActive(false)}
+        localStream={localStream}
+        participants={participants}
+        isMicOn={isMicOn}
+        isCamOn={isCamOn}
+        onToggleMic={toggleMic}
+        onToggleCam={toggleCam}
+        onSendReaction={sendReaction}
+        displayName={displayName || session?.user?.name || 'You'}
       />
     </div>
   );

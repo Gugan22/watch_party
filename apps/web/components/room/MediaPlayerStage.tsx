@@ -25,6 +25,8 @@ interface MediaPlayerStageProps {
   onPause: () => void;
   onPinSelf: () => void;
   isPinned?: boolean;
+  isPipActive?: boolean;
+  onTogglePip?: () => void;
 }
 
 // Smart Streaming Platform Detection (Supports 100+ services, YouTube, and Direct Video)
@@ -85,6 +87,8 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
   onPause,
   onPinSelf,
   isPinned = false,
+  isPipActive = false,
+  onTogglePip,
 }) => {
   const [streamUrl, setStreamUrl] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
@@ -259,6 +263,8 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
             onClearMedia={() => onClearMedia?.()}
             onPinStage={onPinSelf}
             isPinned={isPinned}
+            isPipActive={isPipActive}
+            onTogglePip={onTogglePip}
           />
         )
       ) : localVideoUrl ? (
