@@ -12,6 +12,7 @@ import { VideoTile, type Participant } from '@/components/room/VideoTile';
 import { MediaPlayerStage } from '@/components/room/MediaPlayerStage';
 import { FloatingDock } from '@/components/room/FloatingDock';
 import { FloatingWebcamsPiP } from '@/components/room/FloatingWebcamsPiP';
+import { ExtensionSidebarView } from '@/components/room/ExtensionSidebarView';
 import { ChatDrawer } from '@/components/room/ChatDrawer';
 import { CountdownModal } from '@/components/room/CountdownModal';
 import { PostCallView } from '@/components/room/PostCallView';
@@ -79,11 +80,15 @@ export default function RoomPage() {
   const [activePingTarget, setActivePingTarget] = useState<{ id: string; name: string } | null>(null);
   const [receivedPing, setReceivedPing] = useState<ReceivedPing | null>(null);
   const [selectedChatRecipientId, setSelectedChatRecipientId] = useState<string | null>(null);
+  const [isSidebarMode, setIsSidebarMode] = useState(false);
 
-  // Check URL query parameters for ?share=true and ?host=true
+  // Check URL query parameters for ?share=true, ?host=true, and ?sidebar=true
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('sidebar') === 'true') {
+        setIsSidebarMode(true);
+      }
       if (urlParams.get('host') === 'true' || sessionStorage.getItem(`wp_host_${roomId}`) === 'true') {
         setServerIsHost(true);
       }
@@ -264,6 +269,33 @@ export default function RoomPage() {
       requestMedia();
     }
   }, [requestMedia]);
+
+  // Auto-connect and initialize room when launched inside the extension sidebar
+  useEffect(() => {
+    if (isSidebarMode && stage === 'connecting') {
+      setStage('live');
+    }
+  }, [isSidebarMode, stage]);
+
+  // Listen for local player commands from the extension content script
+  useEffect(() => {
+    const handleExtensionMessage = (event: MessageEvent) => {
+      if (!event.data || event.data.source !== 'watchparty-extension') return;
+      const { action, time } = event.data;
+      if (action === 'play') {
+        setIsPlaying(true);
+        meshRef.current?.broadcastPlayerSync('play', time);
+      } else if (action === 'pause') {
+        setIsPlaying(false);
+        meshRef.current?.broadcastPlayerSync('pause', time);
+      } else if (action === 'seek') {
+        meshRef.current?.broadcastPlayerSync('seek', time);
+      }
+    };
+
+    window.addEventListener('message', handleExtensionMessage);
+    return () => window.removeEventListener('message', handleExtensionMessage);
+  }, []);
 
   // Join Party Action (Mandatory name enforced for guests)
   const handleJoinParty = useCallback(async (explicitName?: string) => {
@@ -509,6 +541,9 @@ export default function RoomPage() {
       // Broadcast to local browser tabs/extensions via window.postMessage
       if (typeof window !== 'undefined') {
         window.postMessage({ source: 'watchparty-sync', action, time, url }, '*');
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ source: 'watchparty-sidebar', action, time }, '*');
+        }
       }
     });
 
@@ -1051,6 +1086,9 @@ export default function RoomPage() {
 
     if (typeof window !== 'undefined') {
       window.postMessage({ source: 'watchparty-sync', action, time: currentTime, url: activeUrl }, '*');
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ source: 'watchparty-sidebar', action, time: currentTime }, '*');
+      }
       try {
         const bc = new BroadcastChannel('watchparty-sync');
         bc.postMessage({ source: 'watchparty-sync', action, time: currentTime, url: activeUrl });
@@ -1239,6 +1277,48 @@ export default function RoomPage() {
   // View 2: Post-Call Room Left
   if (stage === 'left') {
     return <PostCallView onRejoin={() => handleJoinParty()} />;
+  }
+
+  // View 2.5: Injected Extension Sidebar Mode (Unified inside Netflix, Prime Video, Hotstar & Crunchyroll)
+  if (isSidebarMode) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
+        {/* Persistent Audio Sink for all remote participants in sidebar */}
+        <div style={{ display: 'none' }} aria-hidden="true">
+          {participants.map((p) => (
+            <RemoteAudioSink
+              key={p.id}
+              participantId={p.id}
+              stream={p.stream}
+              isMuted={hostMutedIds.has(p.id)}
+            />
+          ))}
+        </div>
+
+        <ExtensionSidebarView
+          roomId={roomId}
+          displayName={displayName || session?.user?.name || 'You'}
+          localStream={localStream}
+          participants={participants}
+          selfParticipant={selfParticipant}
+          isMicOn={isMicOn}
+          isCamOn={isCamOn}
+          isPlaying={isPlaying}
+          onToggleMic={toggleMic}
+          onToggleCam={toggleCam}
+          onTogglePlayPause={togglePlayPause}
+          onSendReaction={sendReaction}
+          activeReactions={activeReactions}
+          messages={messages}
+          onSendMessage={() => handleSendChat({ preventDefault: () => {} } as React.FormEvent)}
+          chatInput={chatInput}
+          onChatInputChange={setChatInput}
+          chatBottomRef={chatBottomRef}
+          isHost={isHost}
+          onLeaveRoom={() => setStage('left')}
+        />
+      </div>
+    );
   }
 
   // View 3: Active Live Room

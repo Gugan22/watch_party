@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B0F19" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="filmAccent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Base Background -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)"/>
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+  
+  <!-- 35mm Celluloid Film Frame Body -->
+  <rect x="76" y="96" width="360" height="320" rx="36" fill="#131B2E" stroke="url(#filmAccent)" stroke-width="12"/>
+  
+  <!-- 35mm Sprocket Perforations (Left Margin) -->
+  <rect x="104" y="132" width="32" height="32" rx="8" fill="#60A5FA"/>
+  <rect x="104" y="240" width="32" height="32" rx="8" fill="#60A5FA"/>
+  <rect x="104" y="348" width="32" height="32" rx="8" fill="#60A5FA"/>
+  
+  <!-- 35mm Sprocket Perforations (Right Margin) -->
+  <rect x="376" y="132" width="32" height="32" rx="8" fill="#60A5FA"/>
+  <rect x="376" y="240" width="32" height="32" rx="8" fill="#60A5FA"/>
+  <rect x="376" y="348" width="32" height="32" rx="8" fill="#60A5FA"/>
+  
+  <!-- Optical Track Dividers -->
+  <line x1="164" y1="96" x2="164" y2="416" stroke="rgba(255,255,255,0.12)" stroke-width="6"/>
+  <line x1="348" y1="96" x2="348" y2="416" stroke="rgba(255,255,255,0.12)" stroke-width="6"/>
+  
+  <!-- Central Cinema Play / Projection Aperture -->
+  <polygon points="228,198 308,256 228,314" fill="url(#filmAccent)" />
+</svg>

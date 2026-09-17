@@ -96,7 +96,9 @@ export const OttSynchronizerStage: React.FC<OttSynchronizerStageProps> = ({
 
   const handleLaunchOtt = () => {
     if (session.url) {
-      window.open(session.url, '_blank', 'noopener,noreferrer');
+      const cleanUrl = session.url.split('#')[0];
+      const targetUrl = `${cleanUrl}#watchparty=${encodeURIComponent(roomId)}`;
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -250,9 +252,10 @@ export const OttSynchronizerStage: React.FC<OttSynchronizerStageProps> = ({
               borderColor: theme.accent,
               boxShadow: `0 8px 24px ${theme.accent}40`,
             }}
+            title={`Watch movie on ${theme.name} with WatchParty video calls on the exact same page!`}
           >
             <span>{theme.icon}</span>
-            <span>Launch on {theme.name}</span>
+            <span>Watch on {theme.name} (Same Page Video + Calls)</span>
             <span style={{ fontSize: '0.8rem', opacity: 0.85 }}>↗</span>
           </button>
 

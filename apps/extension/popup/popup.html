@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>WatchParty Cinema</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      width: 280px;
+      background: #0B0D11;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      box-sizing: border-box;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 10px;
+    }
+    .title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #38BDF8;
+    }
+    .field-group {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      color: #94A3B8;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      background: #1E293B;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: #FFFFFF;
+      font-size: 13px;
+      outline: none;
+    }
+    input:focus {
+      border-color: #38BDF8;
+    }
+    .btn {
+      width: 100%;
+      padding: 9px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      transition: all 0.15s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+      color: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+    }
+    .btn-primary:hover {
+      filter: brightness(1.1);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: #94A3B8;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #FFFFFF;
+    }
+    .footer {
+      font-size: 11px;
+      color: #64748B;
+      text-align: center;
+      line-height: 1.4;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span style="font-size: 18px;">🍿</span>
+    <span class="title">WatchParty Cinema</span>
+  </div>
+
+  <div class="field-group">
+    <label for="room-input">Room Code / ID</label>
+    <input type="text" id="room-input" placeholder="e.g. cinema-party" value="cinema-party" />
+  </div>
+
+  <button class="btn btn-primary" id="open-sidebar-btn">
+    <span>📺</span>
+    <span>Open Sidebar on This Page</span>
+  </button>
+
+  <button class="btn btn-secondary" id="open-web-app-btn">
+    <span>🌐</span>
+    <span>Open WatchParty Web App</span>
+  </button>
+
+  <div class="footer">
+    Supports Netflix, Prime Video, Disney+ Hotstar & Crunchyroll.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

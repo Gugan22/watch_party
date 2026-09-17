@@ -1,0 +1,82 @@
+{
+  "manifest_version": 3,
+  "name": "WatchParty — Synchronized Cinema & Video Calls",
+  "version": "1.0.0",
+  "description": "Watch Netflix, Prime Video, Disney+ Hotstar & Crunchyroll in sync with live webcams on the exact same page.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.netflix.com/*",
+    "*://*.primevideo.com/*",
+    "*://*.amazon.com/*",
+    "*://*.amazon.co.uk/*",
+    "*://*.amazon.de/*",
+    "*://*.amazon.in/*",
+    "*://*.hotstar.com/*",
+    "*://*.disneyplus.com/*",
+    "*://*.crunchyroll.com/*",
+    "*://*.youtube.com/*",
+    "*://localhost/*",
+    "*://*.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.netflix.com/*",
+        "*://*.primevideo.com/*",
+        "*://*.amazon.com/*",
+        "*://*.amazon.co.uk/*",
+        "*://*.amazon.de/*",
+        "*://*.amazon.in/*",
+        "*://*.hotstar.com/*",
+        "*://*.disneyplus.com/*",
+        "*://*.crunchyroll.com/*",
+        "*://*.youtube.com/*"
+      ],
+      "js": ["content/player-hook.js"],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.netflix.com/*",
+        "*://*.primevideo.com/*",
+        "*://*.amazon.com/*",
+        "*://*.amazon.co.uk/*",
+        "*://*.amazon.de/*",
+        "*://*.amazon.in/*",
+        "*://*.hotstar.com/*",
+        "*://*.disneyplus.com/*",
+        "*://*.crunchyroll.com/*",
+        "*://*.youtube.com/*"
+      ],
+      "js": ["content/content.js"],
+      "css": ["content/sidebar.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "128": "icons/icon.svg"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "WatchParty Cinema & Video Calls",
+    "default_icon": "icons/icon.svg"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "content/player-hook.js",
+        "content/sidebar.css",
+        "icons/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
