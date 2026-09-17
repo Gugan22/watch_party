@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import type { OttPlatform, OttSession } from '@watch-party/shared';
 import { YouTubePlayerStage } from './YouTubePlayerStage';
 import { OttSynchronizerStage } from './OttSynchronizerStage';
+import { OttEmbeddedStage } from './OttEmbeddedStage';
 
 interface MediaPlayerStageProps {
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -243,7 +244,7 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
             isPinned={isPinned}
           />
         ) : (
-          <OttSynchronizerStage
+          <OttEmbeddedStage
             session={ottSession}
             roomId={roomId}
             isHost={isHost}
@@ -257,14 +258,9 @@ export const MediaPlayerStage: React.FC<MediaPlayerStageProps> = ({
               onSeek?.(time);
             }}
             onSeek={(time) => onSeek?.(time)}
-            onTriggerCountdown={(action, targetTime) =>
-              onTriggerCountdown?.(action, targetTime)
-            }
             onClearMedia={() => onClearMedia?.()}
             onPinStage={onPinSelf}
             isPinned={isPinned}
-            isPipActive={isPipActive}
-            onTogglePip={onTogglePip}
           />
         )
       ) : localVideoUrl ? (

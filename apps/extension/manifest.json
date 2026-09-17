@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "WatchParty — Synchronized Cinema & Video Calls",
-  "version": "1.0.0",
-  "description": "Watch Netflix, Prime Video, Disney+ Hotstar & Crunchyroll in sync with live webcams on the exact same page.",
+  "version": "1.1.0",
+  "description": "Watch Netflix, Prime Video, Disney+ Hotstar & Crunchyroll in sync directly inside the WatchParty room stage.",
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback"
   ],
   "host_permissions": [
     "*://*.netflix.com/*",
@@ -25,6 +27,15 @@
   "background": {
     "service_worker": "background/background.js"
   },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "strip_headers_rules",
+        "enabled": true,
+        "path": "rules/strip-headers-rules.json"
+      }
+    ]
+  },
   "content_scripts": [
     {
       "matches": [
@@ -41,6 +52,7 @@
       ],
       "js": ["content/player-hook.js"],
       "world": "MAIN",
+      "all_frames": true,
       "run_at": "document_idle"
     },
     {
@@ -59,6 +71,24 @@
       "js": ["content/content.js"],
       "css": ["content/sidebar.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.netflix.com/*",
+        "*://*.primevideo.com/*",
+        "*://*.amazon.com/*",
+        "*://*.amazon.co.uk/*",
+        "*://*.amazon.de/*",
+        "*://*.amazon.in/*",
+        "*://*.hotstar.com/*",
+        "*://*.disneyplus.com/*",
+        "*://*.crunchyroll.com/*",
+        "*://*.youtube.com/*"
+      ],
+      "js": ["content/frame-cleaner.js"],
+      "css": ["content/frame-cleaner.css"],
+      "all_frames": true,
+      "run_at": "document_start"
     }
   ],
   "icons": {
@@ -73,6 +103,8 @@
     {
       "resources": [
         "content/player-hook.js",
+        "content/frame-cleaner.js",
+        "content/frame-cleaner.css",
         "content/sidebar.css",
         "icons/*"
       ],
